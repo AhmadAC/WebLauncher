@@ -29,34 +29,46 @@ jobs:
             npm init -y
           fi
 
-          # Install matching Capacitor packages
-          npm install @capacitor/core @capacitor/cli @capacitor/ios
+          # Install stable Capacitor 6 matching the setup from AuthIphone
+          npm install @capacitor/core@^6.0.0 @capacitor/cli@^6.0.0 @capacitor/ios@^6.0.0
 
           # Create www directory and copy index.html into it
           mkdir -p www
           cp index.html www/
           cp -r *.css *.js assets www/ 2>/dev/null || true
 
-      # Step 4: Initialize and Cleanly Generate Capacitor iOS
+      # Step 4: Configure Capacitor & Fix Deployment Target
       - name: Configure Capacitor iOS Platform
         run: |
-          if [ ! -f capacitor.config.json ] && [ ! -f capacitor.config.ts ]; then
-            npx cap init "WebLauncher" "com.ahmadac.weblauncher" --web-dir "www"
+          # Remove any previous conflicting files
+          rm -rf ios capacitor.config.json capacitor.config.ts
+
+          # Initialize capacitor
+          npx cap init "WebLauncher" "com.ahmadac.weblauncher" --web-dir "www"
+
+          # Add iOS platform files (ignore initial pod install check if it throws)
+          npx cap add ios || true
+
+          # Force deployment target to iOS 15.0 in both Podfile and Xcode Project
+          if [ -f ios/App/Podfile ]; then
+            sed -i '' -E "s/platform :ios, '[0-9.]+'/platform :ios, '15.0'/g" ios/App/Podfile
+          fi
+          if [ -f ios/App/App.xcodeproj/project.pbxproj ]; then
+            sed -i '' -E "s/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g" ios/App/App.xcodeproj/project.pbxproj
           fi
 
-          # Remove any stale/mismatched existing iOS folder
-          rm -rf ios
+          # Run pod install with updated target
+          cd ios/App
+          pod install
+          cd ../..
 
-          # Generate a fresh iOS project and sync web assets
-          npx cap add ios
+          # Sync web code
           npx cap copy ios
 
-      # Step 5: Build Xcode Workspace (Unsigned for Ad-Hoc / Sideloading)
+      # Step 5: Build Xcode Workspace (Unsigned for Sideloading)
       - name: Build Xcode Workspace
         run: |
           cd ios/App
-          pod install
-
           xcodebuild -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
