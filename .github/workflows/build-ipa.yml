@@ -1,418 +1,86 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full bg-slate-950 text-slate-100 select-none">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>HTML Launcher</title>
-  
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
+name: Build iOS IPA
 
-  <!-- Google Font: Inter -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
 
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-          },
-          colors: {
-            iosBg: '#090a10',
-            iosBlue: '#0A84FF',
-            iosRed: '#FF453A',
-            iosGreen: '#30D158',
-          },
-          boxShadow: {
-            'app-icon': '0 8px 24px -4px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.25)',
-          }
-        }
-      }
-    }
-  </script>
+jobs:
+  build:
+    runs-on: macos-latest
 
-  <style>
-    .squircle {
-      border-radius: 22.5%;
-    }
-    
-    .no-scrollbar::-webkit-scrollbar {
-      display: none;
-    }
-    .no-scrollbar {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
+    steps:
+      # Step 1: Check out repository code
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    .glass-panel {
-      background: rgba(22, 24, 32, 0.85);
-      backdrop-filter: blur(25px) saturate(180%);
-      -webkit-backdrop-filter: blur(25px) saturate(180%);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-    }
+      # Step 2: Set up Node.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-    .app-press:active {
-      transform: scale(0.92);
-      opacity: 0.85;
-      transition: transform 0.15s ease, opacity 0.15s ease;
-    }
+      # Step 3: Prepare package.json and web assets
+      - name: Setup Web Directory & Dependencies
+        run: |
+          if [ ! -f package.json ]; then
+            npm init -y
+          fi
 
-    .safe-top {
-      padding-top: max(env(safe-area-inset-top), 20px);
-    }
-    .safe-bottom {
-      padding-bottom: max(env(safe-area-inset-bottom), 20px);
-    }
+          # Install matching Capacitor packages
+          npm install @capacitor/core @capacitor/cli @capacitor/ios
 
-    /* Subtle iOS jiggle animation during Edit Mode */
-    @keyframes jiggle {
-      0% { transform: rotate(-1deg); }
-      50% { transform: rotate(1.2deg); }
-      100% { transform: rotate(-1deg); }
-    }
-    .jiggle {
-      animation: jiggle 0.25s infinite ease-in-out;
-    }
-  </style>
-</head>
+          # Create www directory and copy index.html into it
+          mkdir -p www
+          cp index.html www/
+          cp -r *.css *.js assets www/ 2>/dev/null || true
 
-<body class="h-full w-full overflow-hidden bg-iosBg text-white font-sans antialiased flex flex-col justify-between relative safe-top safe-bottom">
+      # Step 4: Initialize and Cleanly Generate Capacitor iOS
+      - name: Configure Capacitor iOS Platform
+        run: |
+          if [ ! -f capacitor.config.json ] && [ ! -f capacitor.config.ts ]; then
+            npx cap init "WebLauncher" "com.ahmadac.weblauncher" --web-dir "www"
+          fi
 
-  <!-- Ambient Wallpaper Background -->
-  <div class="fixed inset-0 pointer-events-none z-0 opacity-40">
-    <div class="absolute -top-[20%] -left-[10%] w-[80vw] h-[80vw] rounded-full bg-gradient-to-br from-indigo-600/30 via-blue-600/20 to-transparent blur-3xl"></div>
-    <div class="absolute top-[35%] -right-[15%] w-[70vw] h-[70vw] rounded-full bg-gradient-to-br from-purple-600/30 via-pink-600/10 to-transparent blur-3xl"></div>
-  </div>
+          # Remove any stale/mismatched existing iOS folder
+          rm -rf ios
 
-  <!-- Top Navigation -->
-  <header class="relative z-20 w-full px-6 py-2 flex justify-between items-center">
-    <div>
-      <h1 class="text-xl font-bold tracking-tight text-white flex items-center space-x-2">
-        <span>App Launcher</span>
-        <span id="app-counter" class="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/70 font-medium">0 Apps</span>
-      </h1>
-    </div>
+          # Generate a fresh iOS project and sync web assets
+          npx cap add ios
+          npx cap copy ios
 
-    <!-- Edit / Done Button -->
-    <div class="flex items-center space-x-2">
-      <button id="edit-toggle-btn" onclick="toggleEditMode()" class="px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-semibold text-white/90 backdrop-blur-md transition">
-        Edit
-      </button>
-      <button onclick="triggerFilePicker()" class="p-2 rounded-full bg-iosBlue text-white hover:bg-blue-600 active:scale-95 transition shadow-lg flex items-center justify-center">
-        <i data-lucide="plus" class="w-4 h-4"></i>
-      </button>
-    </div>
-  </header>
+      # Step 5: Build Xcode Workspace (Unsigned for Ad-Hoc / Sideloading)
+      - name: Build Xcode Workspace
+        run: |
+          cd ios/App
+          pod install
 
-  <!-- Main Container: Dynamic App Grid -->
-  <main class="relative z-10 flex-1 overflow-y-auto no-scrollbar px-6 py-4 max-w-lg mx-auto w-full">
-    
-    <!-- Empty State (Shown when 0 apps are installed) -->
-    <div id="empty-state" class="hidden flex-col items-center justify-center h-full text-center py-20 space-y-4">
-      <div class="w-16 h-16 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40">
-        <i data-lucide="download-cloud" class="w-8 h-8"></i>
-      </div>
-      <div>
-        <h2 class="text-lg font-bold text-white/90">No Apps Installed</h2>
-        <p class="text-xs text-white/50 max-w-xs mt-1">Tap the button below to import your single-file HTML apps directly from your device.</p>
-      </div>
-      <button onclick="triggerFilePicker()" class="px-5 py-2.5 rounded-2xl bg-iosBlue hover:bg-blue-600 text-white text-xs font-semibold active:scale-95 transition shadow-lg flex items-center space-x-2">
-        <i data-lucide="plus" class="w-4 h-4"></i>
-        <span>Import HTML File</span>
-      </button>
-    </div>
+          xcodebuild -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ENABLE_USER_SCRIPT_SANDBOXING=NO \
+            build
 
-    <!-- Active App Grid -->
-    <div id="app-grid" class="grid grid-cols-3 sm:grid-cols-4 gap-6 py-4 justify-items-center">
-      <!-- App tiles injected dynamically via JS -->
-    </div>
-  </main>
+      # Step 6: Create Payload & Package .ipa
+      - name: Package Payload into IPA
+        run: |
+          mkdir -p build/IPA/Payload
+          cp -R ios/App/build/Build/Products/Release-iphoneos/App.app build/IPA/Payload/
+          cd build/IPA
+          zip -r WebLauncher.ipa Payload
+          echo "IPA successfully created."
 
-  <!-- Bottom Bar -->
-  <footer class="relative z-20 px-6 py-2 flex justify-center items-center text-[11px] text-white/40">
-    <span>Tap an app to launch full-screen</span>
-  </footer>
-
-  <!-- Hidden File Input for iOS Files App -->
-  <input type="file" id="file-picker" accept=".html,.htm,text/html,text/plain" class="hidden" onchange="handleFileSelected(event)">
-
-  <!-- ========================================== -->
-  <!-- FULLSCREEN APP RUNTIME IFRAME             -->
-  <!-- ========================================== -->
-  <div id="runtime-modal" class="fixed inset-0 z-50 hidden bg-black flex-col safe-top safe-bottom">
-    
-    <!-- Floating Minimal Exit Capsule Header -->
-    <div class="w-full px-4 py-2 flex justify-between items-center bg-slate-950/90 border-b border-white/10 backdrop-blur-md">
-      <button onclick="exitApp()" class="px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-semibold flex items-center space-x-1.5 transition">
-        <i data-lucide="chevron-left" class="w-4 h-4"></i>
-        <span>Exit to Launcher</span>
-      </button>
-      <span id="runtime-title" class="font-bold text-xs text-white/80 truncate max-w-[180px]">App</span>
-      <button onclick="reloadApp()" class="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white/80 transition" title="Reload">
-        <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
-      </button>
-    </div>
-
-    <!-- IFrame Canvas -->
-    <div class="flex-1 w-full h-full relative bg-white">
-      <iframe id="runtime-iframe" class="w-full h-full border-0" sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"></iframe>
-    </div>
-  </div>
-
-  <!-- Toast Notification -->
-  <div id="toast" class="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 hidden px-4 py-2 rounded-full glass-panel border border-white/20 text-xs font-semibold text-white shadow-xl transition-all">
-    Notification
-  </div>
-
-  <!-- JavaScript: IndexedDB + Launcher Runtime -->
-  <script>
-    const GRADIENTS = [
-      "from-blue-600 to-indigo-600",
-      "from-purple-600 to-indigo-700",
-      "from-pink-600 to-rose-600",
-      "from-amber-500 to-orange-600",
-      "from-emerald-600 to-teal-700",
-      "from-cyan-500 to-blue-600",
-      "from-fuchsia-600 to-pink-600",
-      "from-red-600 to-rose-700"
-    ];
-
-    let db;
-    let apps = [];
-    let isEditMode = false;
-    let activeAppBlobUrl = null;
-
-    // 1. Initialize IndexedDB Storage
-    function initDatabase() {
-      return new Promise((resolve, reject) => {
-        const req = indexedDB.open('LauncherDB', 1);
-        req.onupgradeneeded = (e) => {
-          const database = e.target.result;
-          if (!database.objectStoreNames.contains('apps')) {
-            database.createObjectStore('apps', { keyPath: 'id' });
-          }
-        };
-        req.onsuccess = (e) => {
-          db = e.target.result;
-          resolve();
-        };
-        req.onerror = () => reject("IndexedDB failed to load");
-      });
-    }
-
-    async function loadApps() {
-      return new Promise((resolve) => {
-        const tx = db.transaction('apps', 'readonly');
-        const store = tx.objectStore('apps');
-        const req = store.getAll();
-        req.onsuccess = () => {
-          apps = req.result || [];
-          resolve(apps);
-        };
-      });
-    }
-
-    async function saveAppToDB(app) {
-      return new Promise((resolve) => {
-        const tx = db.transaction('apps', 'readwrite');
-        const store = tx.objectStore('apps');
-        store.put(app);
-        tx.oncomplete = () => resolve();
-      });
-    }
-
-    async function deleteAppFromDB(id) {
-      return new Promise((resolve) => {
-        const tx = db.transaction('apps', 'readwrite');
-        const store = tx.objectStore('apps');
-        store.delete(id);
-        tx.oncomplete = () => resolve();
-      });
-    }
-
-    // 2. Render Launcher Screen
-    function renderLauncher() {
-      const grid = document.getElementById('app-grid');
-      const emptyState = document.getElementById('empty-state');
-      const counter = document.getElementById('app-counter');
-      grid.innerHTML = '';
-
-      counter.innerText = `${apps.length} App${apps.length === 1 ? '' : 's'}`;
-
-      if (apps.length === 0) {
-        emptyState.classList.remove('hidden');
-        emptyState.classList.add('flex');
-        return;
-      } else {
-        emptyState.classList.add('hidden');
-        emptyState.classList.remove('flex');
-      }
-
-      apps.forEach((app) => {
-        const tile = document.createElement('div');
-        tile.className = "flex flex-col items-center group relative cursor-pointer";
-
-        tile.innerHTML = `
-          <div class="relative ${isEditMode ? 'jiggle' : ''}">
-            <button onclick="handleTileClick(${app.id})" class="w-16 h-16 sm:w-20 sm:h-20 squircle bg-gradient-to-tr ${app.gradient} flex items-center justify-center text-white shadow-app-icon app-press relative overflow-hidden">
-              <span class="text-2xl font-bold tracking-tight">${app.name.charAt(0).toUpperCase()}</span>
-            </button>
-            ${isEditMode ? `
-              <button onclick="removeApp(event, ${app.id})" class="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-iosRed text-white flex items-center justify-center shadow-lg border-2 border-slate-950 z-30">
-                <i data-lucide="x" class="w-3.5 h-3.5 stroke-[3]"></i>
-              </button>
-            ` : ''}
-          </div>
-          <span class="mt-2 text-xs font-semibold text-white/90 truncate w-20 text-center tracking-tight drop-shadow-sm">${escapeHtml(app.name)}</span>
-        `;
-        grid.appendChild(tile);
-      });
-
-      // Always show "+ Add App" card at the end
-      if (!isEditMode) {
-        const addTile = document.createElement('div');
-        addTile.className = "flex flex-col items-center group cursor-pointer";
-        addTile.innerHTML = `
-          <button onclick="triggerFilePicker()" class="w-16 h-16 sm:w-20 sm:h-20 squircle bg-white/5 hover:bg-white/10 border-2 border-dashed border-white/20 hover:border-white/40 flex flex-col items-center justify-center text-white/40 hover:text-white/80 transition app-press">
-            <i data-lucide="plus" class="w-6 h-6 stroke-[2]"></i>
-          </button>
-          <span class="mt-2 text-xs font-medium text-white/40 truncate w-20 text-center">Add App</span>
-        `;
-        grid.appendChild(addTile);
-      }
-
-      lucide.createIcons();
-    }
-
-    // 3. Tile Interaction
-    function handleTileClick(id) {
-      if (isEditMode) return;
-      const targetApp = apps.find(a => a.id === id);
-      if (targetApp) {
-        launchApp(targetApp);
-      }
-    }
-
-    // 4. File Picker & Import Logic
-    function triggerFilePicker() {
-      const input = document.getElementById('file-picker');
-      input.value = '';
-      input.click();
-    }
-
-    function handleFileSelected(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = async function(e) {
-        const htmlContent = e.target.result;
-
-        // Auto-extract app title from <title> tag if available, fallback to filename
-        let appName = file.name.replace(/\.[^/.]+$/, "");
-        const titleMatch = htmlContent.match(/<title[^>]*>([^<]+)<\/title>/i);
-        if (titleMatch && titleMatch[1].trim()) {
-          appName = titleMatch[1].trim();
-        }
-
-        const newApp = {
-          id: Date.now(),
-          name: appName,
-          gradient: GRADIENTS[Math.floor(Math.random() * GRADIENTS.length)],
-          code: htmlContent,
-          timestamp: Date.now()
-        };
-
-        await saveAppToDB(newApp);
-        await loadApps();
-        renderLauncher();
-        showToast(`"${appName}" imported!`);
-      };
-
-      reader.readAsText(file);
-    }
-
-    // 5. Delete App
-    async function removeApp(event, id) {
-      event.stopPropagation();
-      await deleteAppFromDB(id);
-      await loadApps();
-      renderLauncher();
-      showToast("App deleted.");
-    }
-
-    // 6. Edit Mode Toggle
-    function toggleEditMode() {
-      isEditMode = !isEditMode;
-      const btn = document.getElementById('edit-toggle-btn');
-      btn.innerText = isEditMode ? 'Done' : 'Edit';
-      btn.className = isEditMode 
-        ? 'px-3.5 py-1.5 rounded-full bg-iosBlue text-white text-xs font-bold transition shadow-md'
-        : 'px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-semibold text-white/90 backdrop-blur-md transition';
-      renderLauncher();
-    }
-
-    // 7. Fullscreen App Runner
-    function launchApp(app) {
-      document.getElementById('runtime-title').innerText = app.name;
-      const iframe = document.getElementById('runtime-iframe');
-
-      // Create a Blob URL so the app runs natively in its own document scope
-      if (activeAppBlobUrl) {
-        URL.revokeObjectURL(activeAppBlobUrl);
-      }
-      const blob = new Blob([app.code], { type: 'text/html;charset=utf-8' });
-      activeAppBlobUrl = URL.createObjectURL(blob);
-      iframe.src = activeAppBlobUrl;
-
-      document.getElementById('runtime-modal').classList.remove('hidden');
-      document.getElementById('runtime-modal').classList.add('flex');
-    }
-
-    function exitApp() {
-      const modal = document.getElementById('runtime-modal');
-      const iframe = document.getElementById('runtime-iframe');
-      modal.classList.add('hidden');
-      modal.classList.remove('flex');
-      iframe.src = 'about:blank';
-      if (activeAppBlobUrl) {
-        URL.revokeObjectURL(activeAppBlobUrl);
-        activeAppBlobUrl = null;
-      }
-    }
-
-    function reloadApp() {
-      const iframe = document.getElementById('runtime-iframe');
-      if (activeAppBlobUrl) {
-        iframe.src = activeAppBlobUrl;
-      }
-    }
-
-    // Utilities
-    function showToast(msg) {
-      const toast = document.getElementById('toast');
-      toast.innerText = msg;
-      toast.classList.remove('hidden');
-      setTimeout(() => toast.classList.add('hidden'), 2500);
-    }
-
-    function escapeHtml(str) {
-      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-    }
-
-    // Bootstrap
-    window.addEventListener('DOMContentLoaded', async () => {
-      await initDatabase();
-      await loadApps();
-      renderLauncher();
-      lucide.createIcons();
-    });
-  </script>
-</body>
-</html>
+      # Step 7: Upload IPA Artifact
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebLauncher-IPA
+          path: build/IPA/WebLauncher.ipa
+          retention-days: 14
