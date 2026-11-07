@@ -1,0 +1,69 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-13
+
+    steps:
+      # Step 1: Check out repository code
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Node.js environment
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      # Step 3: Install dependencies
+      - name: Install Project Dependencies
+        run: |
+          npm ci || npm install
+
+      # Step 4: Install Capacitor CLI & iOS Platform
+      - name: Install Capacitor iOS
+        run: |
+          npm install @capacitor/core @capacitor/cli @capacitor/ios
+          npx cap add ios || true
+          npx cap copy ios
+          npx cap sync ios
+
+      # Step 5: Configure Build Settings & Code Signing for Simulator / Ad-Hoc
+      - name: Setup Xcode Project Settings
+        run: |
+          cd ios/App
+          # Disable automatic code signing for un-signed / self-signed Ad-Hoc export
+          xcodebuild -project App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -derivedDataPath build \
+            -sdk iphoneos \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      # Step 6: Create Payload Directory and Package .ipa
+      - name: Package Payload into IPA
+        run: |
+          mkdir -p build/IPA/Payload
+          cp -R ios/App/build/Build/Products/Release-iphoneos/App.app build/IPA/Payload/
+          cd build/IPA
+          zip -r HTML_Launcher.ipa Payload
+          echo "IPA Package successfully generated."
+
+      # Step 7: Upload IPA Artifact to GitHub Actions
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HTML-Launcher-iOS-App
+          path: build/IPA/HTML_Launcher.ipa
+          retention-days: 30
