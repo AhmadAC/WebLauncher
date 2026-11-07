@@ -70,7 +70,6 @@
       padding-bottom: max(env(safe-area-inset-bottom), 20px);
     }
 
-    /* Subtle iOS jiggle animation during Edit Mode */
     @keyframes jiggle {
       0% { transform: rotate(-1deg); }
       50% { transform: rotate(1.2deg); }
@@ -99,7 +98,7 @@
       </h1>
     </div>
 
-    <!-- Edit / Done Button -->
+    <!-- Edit / Add Buttons -->
     <div class="flex items-center space-x-2">
       <button id="edit-toggle-btn" onclick="toggleEditMode()" class="px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-semibold text-white/90 backdrop-blur-md transition">
         Edit
@@ -113,14 +112,14 @@
   <!-- Main Container: Dynamic App Grid -->
   <main class="relative z-10 flex-1 overflow-y-auto no-scrollbar px-6 py-4 max-w-lg mx-auto w-full">
     
-    <!-- Empty State (Shown when 0 apps are installed) -->
+    <!-- Empty State -->
     <div id="empty-state" class="hidden flex-col items-center justify-center h-full text-center py-20 space-y-4">
       <div class="w-16 h-16 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40">
         <i data-lucide="download-cloud" class="w-8 h-8"></i>
       </div>
       <div>
         <h2 class="text-lg font-bold text-white/90">No Apps Installed</h2>
-        <p class="text-xs text-white/50 max-w-xs mt-1">Tap the button below to import your single-file HTML apps directly from your device.</p>
+        <p class="text-xs text-white/50 max-w-xs mt-1">Tap below to import single-file HTML apps from your files.</p>
       </div>
       <button onclick="triggerFilePicker()" class="px-5 py-2.5 rounded-2xl bg-iosBlue hover:bg-blue-600 text-white text-xs font-semibold active:scale-95 transition shadow-lg flex items-center space-x-2">
         <i data-lucide="plus" class="w-4 h-4"></i>
@@ -129,25 +128,20 @@
     </div>
 
     <!-- Active App Grid -->
-    <div id="app-grid" class="grid grid-cols-3 sm:grid-cols-4 gap-6 py-4 justify-items-center">
-      <!-- App tiles injected dynamically via JS -->
-    </div>
+    <div id="app-grid" class="grid grid-cols-3 sm:grid-cols-4 gap-6 py-4 justify-items-center"></div>
   </main>
 
-  <!-- Bottom Bar -->
   <footer class="relative z-20 px-6 py-2 flex justify-center items-center text-[11px] text-white/40">
     <span>Tap an app to launch full-screen</span>
   </footer>
 
-  <!-- Hidden File Input for iOS Files App -->
+  <!-- Hidden File Input -->
   <input type="file" id="file-picker" accept=".html,.htm,text/html,text/plain" class="hidden" onchange="handleFileSelected(event)">
 
   <!-- ========================================== -->
   <!-- FULLSCREEN APP RUNTIME IFRAME             -->
   <!-- ========================================== -->
   <div id="runtime-modal" class="fixed inset-0 z-50 hidden bg-black flex-col safe-top safe-bottom">
-    
-    <!-- Floating Minimal Exit Capsule Header -->
     <div class="w-full px-4 py-2 flex justify-between items-center bg-slate-950/90 border-b border-white/10 backdrop-blur-md">
       <button onclick="exitApp()" class="px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-semibold flex items-center space-x-1.5 transition">
         <i data-lucide="chevron-left" class="w-4 h-4"></i>
@@ -159,9 +153,9 @@
       </button>
     </div>
 
-    <!-- IFrame Canvas -->
+    <!-- IFrame with allow="web-share" enabled -->
     <div class="flex-1 w-full h-full relative bg-white">
-      <iframe id="runtime-iframe" class="w-full h-full border-0" sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"></iframe>
+      <iframe id="runtime-iframe" class="w-full h-full border-0" allow="web-share" sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"></iframe>
     </div>
   </div>
 
@@ -170,7 +164,7 @@
     Notification
   </div>
 
-  <!-- JavaScript: IndexedDB + Launcher Runtime -->
+  <!-- Logic -->
   <script>
     const GRADIENTS = [
       "from-blue-600 to-indigo-600",
@@ -188,7 +182,6 @@
     let isEditMode = false;
     let activeAppBlobUrl = null;
 
-    // 1. Initialize IndexedDB Storage
     function initDatabase() {
       return new Promise((resolve, reject) => {
         const req = indexedDB.open('LauncherDB', 1);
@@ -236,7 +229,6 @@
       });
     }
 
-    // 2. Render Launcher Screen
     function renderLauncher() {
       const grid = document.getElementById('app-grid');
       const emptyState = document.getElementById('empty-state');
@@ -274,7 +266,6 @@
         grid.appendChild(tile);
       });
 
-      // Always show "+ Add App" card at the end
       if (!isEditMode) {
         const addTile = document.createElement('div');
         addTile.className = "flex flex-col items-center group cursor-pointer";
@@ -290,16 +281,12 @@
       lucide.createIcons();
     }
 
-    // 3. Tile Interaction
     function handleTileClick(id) {
       if (isEditMode) return;
       const targetApp = apps.find(a => a.id === id);
-      if (targetApp) {
-        launchApp(targetApp);
-      }
+      if (targetApp) launchApp(targetApp);
     }
 
-    // 4. File Picker & Import Logic
     function triggerFilePicker() {
       const input = document.getElementById('file-picker');
       input.value = '';
@@ -314,7 +301,6 @@
       reader.onload = async function(e) {
         const htmlContent = e.target.result;
 
-        // Auto-extract app title from <title> tag if available, fallback to filename
         let appName = file.name.replace(/\.[^/.]+$/, "");
         const titleMatch = htmlContent.match(/<title[^>]*>([^<]+)<\/title>/i);
         if (titleMatch && titleMatch[1].trim()) {
@@ -338,7 +324,6 @@
       reader.readAsText(file);
     }
 
-    // 5. Delete App
     async function removeApp(event, id) {
       event.stopPropagation();
       await deleteAppFromDB(id);
@@ -347,7 +332,6 @@
       showToast("App deleted.");
     }
 
-    // 6. Edit Mode Toggle
     function toggleEditMode() {
       isEditMode = !isEditMode;
       const btn = document.getElementById('edit-toggle-btn');
@@ -358,12 +342,10 @@
       renderLauncher();
     }
 
-    // 7. Fullscreen App Runner
     function launchApp(app) {
       document.getElementById('runtime-title').innerText = app.name;
       const iframe = document.getElementById('runtime-iframe');
 
-      // Create a Blob URL so the app runs natively in its own document scope
       if (activeAppBlobUrl) {
         URL.revokeObjectURL(activeAppBlobUrl);
       }
@@ -394,7 +376,6 @@
       }
     }
 
-    // Utilities
     function showToast(msg) {
       const toast = document.getElementById('toast');
       toast.innerText = msg;
@@ -406,7 +387,6 @@
       return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
-    // Bootstrap
     window.addEventListener('DOMContentLoaded', async () => {
       await initDatabase();
       await loadApps();
