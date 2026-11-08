@@ -51,7 +51,7 @@
     }
 
     .glass-panel {
-      background: rgba(22, 24, 32, 0.85);
+      background: rgba(22, 24, 32, 0.88);
       backdrop-filter: blur(25px) saturate(180%);
       -webkit-backdrop-filter: blur(25px) saturate(180%);
       border: 1px solid rgba(255, 255, 255, 0.12);
@@ -98,12 +98,15 @@
       </h1>
     </div>
 
-    <!-- Edit / Add Buttons -->
+    <!-- Actions: Backup, Edit, Add -->
     <div class="flex items-center space-x-2">
+      <button onclick="openModal('backup-modal')" class="p-2 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white/80 transition" title="Backup & Restore">
+        <i data-lucide="archive" class="w-4 h-4"></i>
+      </button>
       <button id="edit-toggle-btn" onclick="toggleEditMode()" class="px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-semibold text-white/90 backdrop-blur-md transition">
         Edit
       </button>
-      <button onclick="triggerFilePicker()" class="p-2 rounded-full bg-iosBlue text-white hover:bg-blue-600 active:scale-95 transition shadow-lg flex items-center justify-center">
+      <button onclick="triggerFilePicker()" class="p-2 rounded-full bg-iosBlue text-white hover:bg-blue-600 active:scale-95 transition shadow-lg flex items-center justify-center" title="Import App">
         <i data-lucide="plus" class="w-4 h-4"></i>
       </button>
     </div>
@@ -119,12 +122,18 @@
       </div>
       <div>
         <h2 class="text-lg font-bold text-white/90">No Apps Installed</h2>
-        <p class="text-xs text-white/50 max-w-xs mt-1">Tap below to import single-file HTML apps from your files.</p>
+        <p class="text-xs text-white/50 max-w-xs mt-1">Import single-file HTML apps or restore a saved backup.</p>
       </div>
-      <button onclick="triggerFilePicker()" class="px-5 py-2.5 rounded-2xl bg-iosBlue hover:bg-blue-600 text-white text-xs font-semibold active:scale-95 transition shadow-lg flex items-center space-x-2">
-        <i data-lucide="plus" class="w-4 h-4"></i>
-        <span>Import HTML File</span>
-      </button>
+      <div class="flex gap-2">
+        <button onclick="triggerFilePicker()" class="px-4 py-2.5 rounded-2xl bg-iosBlue hover:bg-blue-600 text-white text-xs font-semibold active:scale-95 transition shadow-lg flex items-center space-x-1.5">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          <span>Import HTML</span>
+        </button>
+        <button onclick="triggerBackupRestore()" class="px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold active:scale-95 transition flex items-center space-x-1.5">
+          <i data-lucide="upload" class="w-4 h-4"></i>
+          <span>Restore Backup</span>
+        </button>
+      </div>
     </div>
 
     <!-- Active App Grid -->
@@ -135,15 +144,61 @@
     <span>Tap an app to launch full-screen</span>
   </footer>
 
-  <!-- Hidden File Input -->
-  <input type="file" id="file-picker" accept=".html,.htm,text/html,text/plain" class="hidden" onchange="handleFileSelected(event)">
+  <!-- Hidden File Inputs -->
+  <input type="file" id="file-picker" accept=".html,.htm,text/html,text/plain,.json,application/json" class="hidden" onchange="handleFileSelected(event)">
+  <input type="file" id="backup-picker" accept=".json,application/json,text/plain" class="hidden" onchange="handleBackupSelected(event)">
+
+  <!-- ========================================== -->
+  <!-- BACKUP & RESTORE MODAL                    -->
+  <!-- ========================================== -->
+  <div id="backup-modal" class="fixed inset-0 z-50 hidden bg-black/70 backdrop-blur-xl justify-center items-center p-4">
+    <div class="glass-panel w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b border-white/10 pb-3">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="archive" class="w-5 h-5 text-iosBlue"></i>
+          <h2 class="text-base font-bold text-white">Backup & Restore</h2>
+        </div>
+        <button onclick="closeModal('backup-modal')" class="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/70">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <p class="text-xs text-white/60 leading-relaxed">
+        Export your installed HTML apps to an external file. If you reinstall or update the IPA, restore the backup to reload all your apps instantly.
+      </p>
+
+      <div class="space-y-2.5 pt-2">
+        <!-- Export All Apps Button -->
+        <button onclick="exportAllApps()" class="w-full py-3 px-4 rounded-xl bg-iosBlue/20 hover:bg-iosBlue/30 border border-iosBlue/40 text-iosBlue font-semibold text-xs flex items-center justify-center space-x-2 active:scale-98 transition">
+          <i data-lucide="share" class="w-4 h-4"></i>
+          <span>Export All Apps (Save Backup)</span>
+        </button>
+
+        <!-- Restore Apps Button -->
+        <button onclick="triggerBackupRestore()" class="w-full py-3 px-4 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-white font-semibold text-xs flex items-center justify-center space-x-2 active:scale-98 transition">
+          <i data-lucide="upload" class="w-4 h-4"></i>
+          <span>Restore Backup (.json)</span>
+        </button>
+
+        <!-- Wipe Button -->
+        <button onclick="confirmWipeAll()" class="w-full py-2.5 px-4 rounded-xl bg-iosRed/20 hover:bg-iosRed/30 border border-iosRed/30 text-iosRed font-semibold text-xs flex items-center justify-center space-x-1.5 active:scale-98 transition">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          <span>Delete All Apps</span>
+        </button>
+      </div>
+
+      <div class="pt-2 text-center">
+        <button onclick="closeModal('backup-modal')" class="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white">
+          Done
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- ========================================== -->
   <!-- FULLSCREEN APP RUNTIME IFRAME             -->
   <!-- ========================================== -->
   <div id="runtime-modal" class="fixed inset-0 z-50 hidden bg-black flex-col">
-    
-    <!-- Top Header Bar -->
     <div id="runtime-header" class="w-full px-4 py-2 flex justify-between items-center bg-slate-950/95 border-b border-white/10 backdrop-blur-md transition-all duration-300 z-50 safe-top">
       <div class="flex items-center space-x-2">
         <button onclick="exitApp()" class="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-semibold flex items-center space-x-1.5 transition">
@@ -165,8 +220,8 @@
       </div>
     </div>
 
-    <!-- Floating Restore Controls Button (Shows when bar is hidden) -->
-    <button id="floating-restore-btn" onclick="showRuntimeControls()" class="fixed top-4 right-4 z-[60] hidden p-2.5 rounded-full bg-black/60 hover:bg-black/85 text-white/80 backdrop-blur-md border border-white/20 shadow-2xl active:scale-90 transition" title="Show Launcher Menu" style="top: max(env(safe-area-inset-top), 14px);">
+    <!-- Floating Restore Controls Button -->
+    <button id="floating-restore-btn" onclick="showRuntimeControls()" class="fixed top-4 right-4 z-[60] hidden p-2.5 rounded-full bg-black/60 hover:bg-black/85 text-white/80 backdrop-blur-md border border-white/20 shadow-2xl active:scale-90 transition" title="Show Controls" style="top: max(env(safe-area-inset-top), 14px);">
       <i data-lucide="menu" class="w-4 h-4"></i>
     </button>
 
@@ -181,7 +236,7 @@
     Notification
   </div>
 
-  <!-- Logic -->
+  <!-- JavaScript: IndexedDB + Launcher Runtime + Backup Logic -->
   <script>
     const GRADIENTS = [
       "from-blue-600 to-indigo-600",
@@ -199,6 +254,7 @@
     let isEditMode = false;
     let activeAppBlobUrl = null;
 
+    // 1. IndexedDB Setup
     function initDatabase() {
       return new Promise((resolve, reject) => {
         const req = indexedDB.open('LauncherDB', 1);
@@ -246,6 +302,16 @@
       });
     }
 
+    async function clearAllAppsFromDB() {
+      return new Promise((resolve) => {
+        const tx = db.transaction('apps', 'readwrite');
+        const store = tx.objectStore('apps');
+        store.clear();
+        tx.oncomplete = () => resolve();
+      });
+    }
+
+    // 2. Render Screen
     function renderLauncher() {
       const grid = document.getElementById('app-grid');
       const emptyState = document.getElementById('empty-state');
@@ -304,6 +370,7 @@
       if (targetApp) launchApp(targetApp);
     }
 
+    // 3. File Import (HTML or Backup JSON)
     function triggerFilePicker() {
       const input = document.getElementById('file-picker');
       input.value = '';
@@ -316,10 +383,17 @@
 
       const reader = new FileReader();
       reader.onload = async function(e) {
-        const htmlContent = e.target.result;
+        const fileContent = e.target.result;
 
+        // If user picked a backup JSON file via the + button, auto-restore
+        if (file.name.endsWith('.json') || file.type === 'application/json') {
+          processBackupContent(fileContent);
+          return;
+        }
+
+        // Standard HTML App Import
         let appName = file.name.replace(/\.[^/.]+$/, "");
-        const titleMatch = htmlContent.match(/<title[^>]*>([^<]+)<\/title>/i);
+        const titleMatch = fileContent.match(/<title[^>]*>([^<]+)<\/title>/i);
         if (titleMatch && titleMatch[1].trim()) {
           appName = titleMatch[1].trim();
         }
@@ -328,7 +402,7 @@
           id: Date.now(),
           name: appName,
           gradient: GRADIENTS[Math.floor(Math.random() * GRADIENTS.length)],
-          code: htmlContent,
+          code: fileContent,
           timestamp: Date.now()
         };
 
@@ -339,6 +413,114 @@
       };
 
       reader.readAsText(file);
+    }
+
+    // 4. Backup & Restore Operations
+    async function exportAllApps() {
+      if (!apps || apps.length === 0) {
+        showToast("No apps installed to export!");
+        return;
+      }
+
+      const dateIso = new Date().toISOString().split('T')[0];
+      const filename = `weblauncher-backup-${dateIso}.json`;
+      
+      const backupData = {
+        version: 1,
+        source: "WebLauncher",
+        exportedAt: new Date().toISOString(),
+        totalApps: apps.length,
+        apps: apps
+      };
+
+      const jsonStr = JSON.stringify(backupData, null, 2);
+
+      // Trigger iOS Native Share Sheet to "Save to Files"
+      if (navigator.share) {
+        try {
+          const file = new File([jsonStr], filename, { type: 'application/json' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: "WebLauncher Apps Backup"
+            });
+            showToast("Backup exported!");
+            closeModal('backup-modal');
+            return;
+          }
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+          console.warn("Share failed:", err);
+        }
+      }
+
+      // Fallback
+      navigator.clipboard.writeText(jsonStr).then(() => {
+        showToast("Backup JSON copied to clipboard!");
+      }).catch(() => {
+        showToast("Failed to export backup.");
+      });
+    }
+
+    function triggerBackupRestore() {
+      const input = document.getElementById('backup-picker');
+      input.value = '';
+      input.click();
+    }
+
+    function handleBackupSelected(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        processBackupContent(e.target.result);
+      };
+      reader.readAsText(file);
+    }
+
+    async function processBackupContent(rawContent) {
+      try {
+        const parsed = JSON.parse(rawContent);
+        const importedApps = Array.isArray(parsed) ? parsed : (parsed.apps || []);
+
+        if (!Array.isArray(importedApps) || importedApps.length === 0) {
+          showToast("No valid apps found in backup file.");
+          return;
+        }
+
+        let restoredCount = 0;
+        for (const item of importedApps) {
+          if (item && item.name && item.code) {
+            const appObj = {
+              id: item.id || Date.now() + Math.floor(Math.random() * 1000),
+              name: item.name,
+              gradient: item.gradient || GRADIENTS[Math.floor(Math.random() * GRADIENTS.length)],
+              code: item.code,
+              timestamp: item.timestamp || Date.now()
+            };
+            await saveAppToDB(appObj);
+            restoredCount++;
+          }
+        }
+
+        await loadApps();
+        renderLauncher();
+        closeModal('backup-modal');
+        showToast(`Restored ${restoredCount} apps!`);
+      } catch (err) {
+        showToast("Invalid backup JSON file.");
+      }
+    }
+
+    async function confirmWipeAll() {
+      if (confirm("Are you sure you want to delete ALL apps? Make sure you exported a backup first.")) {
+        await clearAllAppsFromDB();
+        await loadApps();
+        renderLauncher();
+        closeModal('backup-modal');
+        showToast("All apps deleted.");
+      }
     }
 
     async function removeApp(event, id) {
@@ -359,7 +541,7 @@
       renderLauncher();
     }
 
-    // Fullscreen Controls Toggle
+    // 5. Fullscreen Runner Controls
     function hideRuntimeControls() {
       document.getElementById('runtime-header').classList.add('hidden');
       document.getElementById('floating-restore-btn').classList.remove('hidden');
@@ -375,7 +557,6 @@
       document.getElementById('runtime-title').innerText = app.name;
       const iframe = document.getElementById('runtime-iframe');
 
-      // Reset controls visibility
       showRuntimeControls();
 
       if (activeAppBlobUrl) {
@@ -408,11 +589,25 @@
       }
     }
 
+    // Modal Helpers
+    function openModal(id) {
+      const el = document.getElementById(id);
+      el.classList.remove('hidden');
+      el.classList.add('flex');
+      lucide.createIcons();
+    }
+
+    function closeModal(id) {
+      const el = document.getElementById(id);
+      el.classList.add('hidden');
+      el.classList.remove('flex');
+    }
+
     function showToast(msg) {
       const toast = document.getElementById('toast');
       toast.innerText = msg;
       toast.classList.remove('hidden');
-      setTimeout(() => toast.classList.remove('hidden'), 2500);
+      setTimeout(() => toast.classList.add('hidden'), 2400);
     }
 
     function escapeHtml(str) {
