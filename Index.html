@@ -141,21 +141,38 @@
   <!-- ========================================== -->
   <!-- FULLSCREEN APP RUNTIME IFRAME             -->
   <!-- ========================================== -->
-  <div id="runtime-modal" class="fixed inset-0 z-50 hidden bg-black flex-col safe-top safe-bottom">
-    <div class="w-full px-4 py-2 flex justify-between items-center bg-slate-950/90 border-b border-white/10 backdrop-blur-md">
-      <button onclick="exitApp()" class="px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-semibold flex items-center space-x-1.5 transition">
-        <i data-lucide="chevron-left" class="w-4 h-4"></i>
-        <span>Exit to Launcher</span>
-      </button>
-      <span id="runtime-title" class="font-bold text-xs text-white/80 truncate max-w-[180px]">App</span>
-      <button onclick="reloadApp()" class="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white/80 transition" title="Reload">
-        <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
-      </button>
+  <div id="runtime-modal" class="fixed inset-0 z-50 hidden bg-black flex-col">
+    
+    <!-- Top Header Bar -->
+    <div id="runtime-header" class="w-full px-4 py-2 flex justify-between items-center bg-slate-950/95 border-b border-white/10 backdrop-blur-md transition-all duration-300 z-50 safe-top">
+      <div class="flex items-center space-x-2">
+        <button onclick="exitApp()" class="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-semibold flex items-center space-x-1.5 transition">
+          <i data-lucide="chevron-left" class="w-4 h-4"></i>
+          <span>Exit</span>
+        </button>
+        <button onclick="hideRuntimeControls()" class="px-2.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white/80 text-xs font-medium flex items-center space-x-1 transition" title="Hide Top Bar">
+          <i data-lucide="maximize" class="w-3.5 h-3.5"></i>
+          <span>Hide Bar</span>
+        </button>
+      </div>
+      
+      <span id="runtime-title" class="font-bold text-xs text-white/80 truncate max-w-[140px]">App</span>
+      
+      <div class="flex items-center space-x-2">
+        <button onclick="reloadApp()" class="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white/80 transition" title="Reload">
+          <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
     </div>
 
-    <!-- IFrame with allow="web-share" enabled -->
-    <div class="flex-1 w-full h-full relative bg-white">
-      <iframe id="runtime-iframe" class="w-full h-full border-0" allow="web-share" sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"></iframe>
+    <!-- Floating Restore Controls Button (Shows when bar is hidden) -->
+    <button id="floating-restore-btn" onclick="showRuntimeControls()" class="fixed top-4 right-4 z-[60] hidden p-2.5 rounded-full bg-black/60 hover:bg-black/85 text-white/80 backdrop-blur-md border border-white/20 shadow-2xl active:scale-90 transition" title="Show Launcher Menu" style="top: max(env(safe-area-inset-top), 14px);">
+      <i data-lucide="menu" class="w-4 h-4"></i>
+    </button>
+
+    <!-- Edge-to-Edge IFrame Canvas -->
+    <div class="flex-1 w-full h-full relative bg-black overflow-hidden">
+      <iframe id="runtime-iframe" class="w-full h-full border-0 block" allow="web-share" sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"></iframe>
     </div>
   </div>
 
@@ -342,9 +359,24 @@
       renderLauncher();
     }
 
+    // Fullscreen Controls Toggle
+    function hideRuntimeControls() {
+      document.getElementById('runtime-header').classList.add('hidden');
+      document.getElementById('floating-restore-btn').classList.remove('hidden');
+      showToast('Bar hidden. Tap top-right button to restore.');
+    }
+
+    function showRuntimeControls() {
+      document.getElementById('runtime-header').classList.remove('hidden');
+      document.getElementById('floating-restore-btn').classList.add('hidden');
+    }
+
     function launchApp(app) {
       document.getElementById('runtime-title').innerText = app.name;
       const iframe = document.getElementById('runtime-iframe');
+
+      // Reset controls visibility
+      showRuntimeControls();
 
       if (activeAppBlobUrl) {
         URL.revokeObjectURL(activeAppBlobUrl);
@@ -380,7 +412,7 @@
       const toast = document.getElementById('toast');
       toast.innerText = msg;
       toast.classList.remove('hidden');
-      setTimeout(() => toast.classList.add('hidden'), 2500);
+      setTimeout(() => toast.classList.remove('hidden'), 2500);
     }
 
     function escapeHtml(str) {
