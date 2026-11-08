@@ -63,11 +63,12 @@
       transition: transform 0.15s ease, opacity 0.15s ease;
     }
 
+    /* Generous Safe Area padding for all modern iPhone notches & Dynamic Islands */
     .safe-top {
-      padding-top: max(env(safe-area-inset-top), 20px);
+      padding-top: max(env(safe-area-inset-top, 48px), 54px);
     }
     .safe-bottom {
-      padding-bottom: max(env(safe-area-inset-bottom), 20px);
+      padding-bottom: max(env(safe-area-inset-bottom, 20px), 24px);
     }
 
     @keyframes jiggle {
@@ -94,19 +95,19 @@
     <div>
       <h1 class="text-xl font-bold tracking-tight text-white flex items-center space-x-2">
         <span>App Launcher</span>
-        <span id="app-counter" class="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/70 font-medium">0 Apps</span>
+        <span id="app-counter" class="text-xs px-2.5 py-0.5 rounded-full bg-white/10 text-white/70 font-medium">0 Apps</span>
       </h1>
     </div>
 
     <!-- Actions: Backup, Edit, Add -->
-    <div class="flex items-center space-x-2">
-      <button onclick="openModal('backup-modal')" class="p-2 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white/80 transition" title="Backup & Restore">
+    <div class="flex items-center space-x-2.5">
+      <button onclick="openModal('backup-modal')" class="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white/80 flex items-center justify-center transition border border-white/10" title="Backup & Restore">
         <i data-lucide="archive" class="w-4 h-4"></i>
       </button>
-      <button id="edit-toggle-btn" onclick="toggleEditMode()" class="px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-semibold text-white/90 backdrop-blur-md transition">
+      <button id="edit-toggle-btn" onclick="toggleEditMode()" class="h-9 px-3.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-semibold text-white/90 backdrop-blur-md transition border border-white/10">
         Edit
       </button>
-      <button onclick="triggerFilePicker()" class="p-2 rounded-full bg-iosBlue text-white hover:bg-blue-600 active:scale-95 transition shadow-lg flex items-center justify-center" title="Import App">
+      <button onclick="triggerFilePicker()" class="w-9 h-9 rounded-full bg-iosBlue text-white hover:bg-blue-600 active:scale-95 transition shadow-lg flex items-center justify-center" title="Import App">
         <i data-lucide="plus" class="w-4 h-4"></i>
       </button>
     </div>
@@ -114,8 +115,6 @@
 
   <!-- Main Container: Dynamic App Grid -->
   <main class="relative z-10 flex-1 overflow-y-auto no-scrollbar px-6 py-4 max-w-lg mx-auto w-full">
-    
-    <!-- Empty State -->
     <div id="empty-state" class="hidden flex-col items-center justify-center h-full text-center py-20 space-y-4">
       <div class="w-16 h-16 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40">
         <i data-lucide="download-cloud" class="w-8 h-8"></i>
@@ -136,7 +135,6 @@
       </div>
     </div>
 
-    <!-- Active App Grid -->
     <div id="app-grid" class="grid grid-cols-3 sm:grid-cols-4 gap-6 py-4 justify-items-center"></div>
   </main>
 
@@ -144,13 +142,11 @@
     <span>Tap an app to launch full-screen</span>
   </footer>
 
-  <!-- Hidden File Inputs -->
+  <!-- Hidden Inputs -->
   <input type="file" id="file-picker" accept=".html,.htm,text/html,text/plain,.json,application/json" class="hidden" onchange="handleFileSelected(event)">
   <input type="file" id="backup-picker" accept=".json,application/json,text/plain" class="hidden" onchange="handleBackupSelected(event)">
 
-  <!-- ========================================== -->
-  <!-- BACKUP & RESTORE MODAL                    -->
-  <!-- ========================================== -->
+  <!-- BACKUP & RESTORE MODAL -->
   <div id="backup-modal" class="fixed inset-0 z-50 hidden bg-black/70 backdrop-blur-xl justify-center items-center p-4">
     <div class="glass-panel w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4">
       <div class="flex justify-between items-center border-b border-white/10 pb-3">
@@ -164,23 +160,20 @@
       </div>
 
       <p class="text-xs text-white/60 leading-relaxed">
-        Export your installed HTML apps to an external file. If you reinstall or update the IPA, restore the backup to reload all your apps instantly.
+        Export your apps into a backup file. If you reinstall or update the IPA, restore the backup to reload all your apps instantly.
       </p>
 
       <div class="space-y-2.5 pt-2">
-        <!-- Export All Apps Button -->
         <button onclick="exportAllApps()" class="w-full py-3 px-4 rounded-xl bg-iosBlue/20 hover:bg-iosBlue/30 border border-iosBlue/40 text-iosBlue font-semibold text-xs flex items-center justify-center space-x-2 active:scale-98 transition">
           <i data-lucide="share" class="w-4 h-4"></i>
           <span>Export All Apps (Save Backup)</span>
         </button>
 
-        <!-- Restore Apps Button -->
         <button onclick="triggerBackupRestore()" class="w-full py-3 px-4 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-white font-semibold text-xs flex items-center justify-center space-x-2 active:scale-98 transition">
           <i data-lucide="upload" class="w-4 h-4"></i>
           <span>Restore Backup (.json)</span>
         </button>
 
-        <!-- Wipe Button -->
         <button onclick="confirmWipeAll()" class="w-full py-2.5 px-4 rounded-xl bg-iosRed/20 hover:bg-iosRed/30 border border-iosRed/30 text-iosRed font-semibold text-xs flex items-center justify-center space-x-1.5 active:scale-98 transition">
           <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
           <span>Delete All Apps</span>
@@ -199,30 +192,33 @@
   <!-- FULLSCREEN APP RUNTIME IFRAME             -->
   <!-- ========================================== -->
   <div id="runtime-modal" class="fixed inset-0 z-50 hidden bg-black flex-col">
-    <div id="runtime-header" class="w-full px-4 py-2 flex justify-between items-center bg-slate-950/95 border-b border-white/10 backdrop-blur-md transition-all duration-300 z-50 safe-top">
-      <div class="flex items-center space-x-2">
-        <button onclick="exitApp()" class="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-semibold flex items-center space-x-1.5 transition">
+    
+    <!-- Top Header Bar (Now sitting safely below status bar & clock) -->
+    <div id="runtime-header" class="w-full px-5 pb-3 flex justify-between items-center bg-slate-950/95 border-b border-white/10 backdrop-blur-md transition-all duration-300 z-50" style="padding-top: max(env(safe-area-inset-top, 50px), 54px);">
+      <div class="flex items-center space-x-2.5">
+        <button onclick="exitApp()" class="h-10 px-4 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-semibold flex items-center space-x-1.5 transition border border-white/10 shadow-sm">
           <i data-lucide="chevron-left" class="w-4 h-4"></i>
           <span>Exit</span>
         </button>
-        <button onclick="hideRuntimeControls()" class="px-2.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white/80 text-xs font-medium flex items-center space-x-1 transition" title="Hide Top Bar">
-          <i data-lucide="maximize" class="w-3.5 h-3.5"></i>
+        <button onclick="hideRuntimeControls()" class="h-10 px-3.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white/90 text-xs font-medium flex items-center space-x-1.5 transition border border-white/10 shadow-sm" title="Hide Top Bar">
+          <i data-lucide="maximize" class="w-4 h-4"></i>
           <span>Hide Bar</span>
         </button>
       </div>
       
-      <span id="runtime-title" class="font-bold text-xs text-white/80 truncate max-w-[140px]">App</span>
+      <span id="runtime-title" class="font-bold text-xs text-white/80 truncate max-w-[120px] text-center">App</span>
       
       <div class="flex items-center space-x-2">
-        <button onclick="reloadApp()" class="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white/80 transition" title="Reload">
-          <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+        <button onclick="reloadApp()" class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white/80 flex items-center justify-center transition border border-white/10 shadow-sm" title="Reload">
+          <i data-lucide="rotate-cw" class="w-4 h-4"></i>
         </button>
       </div>
     </div>
 
-    <!-- Floating Restore Controls Button -->
-    <button id="floating-restore-btn" onclick="showRuntimeControls()" class="fixed top-4 right-4 z-[60] hidden p-2.5 rounded-full bg-black/60 hover:bg-black/85 text-white/80 backdrop-blur-md border border-white/20 shadow-2xl active:scale-90 transition" title="Show Controls" style="top: max(env(safe-area-inset-top), 14px);">
+    <!-- Floating Restore Controls Button (Accessible pill positioned below battery icon) -->
+    <button id="floating-restore-btn" onclick="showRuntimeControls()" class="fixed z-[60] hidden h-11 px-4 rounded-full bg-slate-900/95 hover:bg-black text-white text-xs font-semibold backdrop-blur-xl border border-white/20 shadow-2xl active:scale-95 flex items-center space-x-2 transition" style="top: max(env(safe-area-inset-top, 50px), 56px); right: 16px;">
       <i data-lucide="menu" class="w-4 h-4"></i>
+      <span>Menu</span>
     </button>
 
     <!-- Edge-to-Edge IFrame Canvas -->
@@ -236,7 +232,6 @@
     Notification
   </div>
 
-  <!-- JavaScript: IndexedDB + Launcher Runtime + Backup Logic -->
   <script>
     const GRADIENTS = [
       "from-blue-600 to-indigo-600",
@@ -254,7 +249,6 @@
     let isEditMode = false;
     let activeAppBlobUrl = null;
 
-    // 1. IndexedDB Setup
     function initDatabase() {
       return new Promise((resolve, reject) => {
         const req = indexedDB.open('LauncherDB', 1);
@@ -311,7 +305,6 @@
       });
     }
 
-    // 2. Render Screen
     function renderLauncher() {
       const grid = document.getElementById('app-grid');
       const emptyState = document.getElementById('empty-state');
@@ -370,7 +363,6 @@
       if (targetApp) launchApp(targetApp);
     }
 
-    // 3. File Import (HTML or Backup JSON)
     function triggerFilePicker() {
       const input = document.getElementById('file-picker');
       input.value = '';
@@ -385,13 +377,11 @@
       reader.onload = async function(e) {
         const fileContent = e.target.result;
 
-        // If user picked a backup JSON file via the + button, auto-restore
         if (file.name.endsWith('.json') || file.type === 'application/json') {
           processBackupContent(fileContent);
           return;
         }
 
-        // Standard HTML App Import
         let appName = file.name.replace(/\.[^/.]+$/, "");
         const titleMatch = fileContent.match(/<title[^>]*>([^<]+)<\/title>/i);
         if (titleMatch && titleMatch[1].trim()) {
@@ -415,7 +405,6 @@
       reader.readAsText(file);
     }
 
-    // 4. Backup & Restore Operations
     async function exportAllApps() {
       if (!apps || apps.length === 0) {
         showToast("No apps installed to export!");
@@ -435,7 +424,6 @@
 
       const jsonStr = JSON.stringify(backupData, null, 2);
 
-      // Trigger iOS Native Share Sheet to "Save to Files"
       if (navigator.share) {
         try {
           const file = new File([jsonStr], filename, { type: 'application/json' });
@@ -444,17 +432,15 @@
               files: [file],
               title: "WebLauncher Apps Backup"
             });
-            showToast("Backup exported!");
+            showToast("Backup saved!");
             closeModal('backup-modal');
             return;
           }
         } catch (err) {
           if (err.name === 'AbortError') return;
-          console.warn("Share failed:", err);
         }
       }
 
-      // Fallback
       navigator.clipboard.writeText(jsonStr).then(() => {
         showToast("Backup JSON copied to clipboard!");
       }).catch(() => {
@@ -514,7 +500,7 @@
     }
 
     async function confirmWipeAll() {
-      if (confirm("Are you sure you want to delete ALL apps? Make sure you exported a backup first.")) {
+      if (confirm("Delete ALL apps? Make sure you exported a backup first.")) {
         await clearAllAppsFromDB();
         await loadApps();
         renderLauncher();
@@ -536,16 +522,15 @@
       const btn = document.getElementById('edit-toggle-btn');
       btn.innerText = isEditMode ? 'Done' : 'Edit';
       btn.className = isEditMode 
-        ? 'px-3.5 py-1.5 rounded-full bg-iosBlue text-white text-xs font-bold transition shadow-md'
-        : 'px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-semibold text-white/90 backdrop-blur-md transition';
+        ? 'h-9 px-3.5 rounded-full bg-iosBlue text-white text-xs font-bold transition shadow-md'
+        : 'h-9 px-3.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-semibold text-white/90 backdrop-blur-md transition border border-white/10';
       renderLauncher();
     }
 
-    // 5. Fullscreen Runner Controls
+    // Fullscreen Controls Toggle
     function hideRuntimeControls() {
       document.getElementById('runtime-header').classList.add('hidden');
       document.getElementById('floating-restore-btn').classList.remove('hidden');
-      showToast('Bar hidden. Tap top-right button to restore.');
     }
 
     function showRuntimeControls() {
@@ -589,7 +574,6 @@
       }
     }
 
-    // Modal Helpers
     function openModal(id) {
       const el = document.getElementById(id);
       el.classList.remove('hidden');
