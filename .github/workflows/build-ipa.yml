@@ -29,7 +29,7 @@ jobs:
             npm init -y
           fi
 
-          # Install Capacitor 6 and the native Bluetooth Low Energy plugin
+          # Install Capacitor 6 and Bluetooth LE plugin
           npm install @capacitor/core@^6.0.0 @capacitor/cli@^6.0.0 @capacitor/ios@^6.0.0 @capacitor-community/bluetooth-le@^6.0.0
 
           # Create www directory and copy web files
@@ -43,19 +43,23 @@ jobs:
           # Remove any previous conflicting files
           rm -rf ios capacitor.config.json capacitor.config.ts
 
-          # Initialize capacitor
+          # Initialize capacitor with full bridge access
           npx cap init "WebLauncher" "com.ahmadac.weblauncher" --web-dir "www"
 
           # Add iOS platform files
           npx cap add ios || true
 
-          # Inject iOS Bluetooth Privacy Entitlements into Info.plist
+          # Inject mandatory iOS 18 Bluetooth Background Modes & Privacy Entitlements
           if [ -f ios/App/App/Info.plist ]; then
-            /usr/libexec/PlistBuddy -c "Add :NSBluetoothAlwaysUsageDescription string 'WebLauncher connects to and exchanges data with ESP32 and BLE peripherals.'" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSBluetoothAlwaysUsageDescription 'WebLauncher connects to and exchanges data with ESP32 and BLE peripherals.'" ios/App/App/Info.plist
+            /usr/libexec/PlistBuddy -c "Add :NSBluetoothAlwaysUsageDescription string 'WebLauncher connects to and controls ESP32 and BLE peripherals.'" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSBluetoothAlwaysUsageDescription 'WebLauncher connects to and controls ESP32 and BLE peripherals.'" ios/App/App/Info.plist
             /usr/libexec/PlistBuddy -c "Add :NSBluetoothPeripheralUsageDescription string 'WebLauncher communicates with nearby ESP32 devices.'" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSBluetoothPeripheralUsageDescription 'WebLauncher communicates with nearby ESP32 devices.'" ios/App/App/Info.plist
+            
+            # Add UIBackgroundModes for bluetooth-central so iOS does not kill the app when connected
+            /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" ios/App/App/Info.plist || true
+            /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string bluetooth-central" ios/App/App/Info.plist || true
           fi
 
-          # Force deployment target to iOS 15.0 in both Podfile and Xcode Project
+          # Force deployment target to iOS 15.0 in Podfile and Xcode Project
           if [ -f ios/App/Podfile ]; then
             sed -i '' -E "s/platform :ios, '[0-9.]+'/platform :ios, '15.0'/g" ios/App/Podfile
           fi
