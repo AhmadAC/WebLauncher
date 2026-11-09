@@ -37,10 +37,10 @@
     }
 
     .floating-glass {
-      background: rgba(15, 23, 42, 0.80) !important;
+      background: rgba(15, 23, 42, 0.85) !important;
       backdrop-filter: blur(16px) saturate(160%);
       -webkit-backdrop-filter: blur(16px) saturate(160%);
-      border: 1px solid rgba(255, 255, 255, 0.22);
+      border: 1px solid rgba(255, 255, 255, 0.25);
     }
 
     .app-press:active {
@@ -84,9 +84,9 @@
       </h1>
     </div>
 
-    <!-- Top Action Buttons -->
+    <!-- Actions -->
     <div style="display:flex; align-items:center; gap:8px;">
-      <button type="button" onclick="downloadAppLogs()" style="width:36px; height:36px; border-radius:9999px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.15); color:white; display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Download Crash / Debug Log to Files">
+      <button type="button" onclick="downloadAppLogs()" style="width:36px; height:36px; border-radius:9999px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.15); color:white; display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Download Crash / Debug Log">
         <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
           <polyline points="14 2 14 8 20 8"></polyline>
@@ -229,28 +229,27 @@
     <!-- Top Dynamic Island Buffer -->
     <div id="runtime-safe-top" style="width:100%; height:max(env(safe-area-inset-top, 54px), 64px); background:#000000; flex-shrink:0;"></div>
 
-    <!-- Floating Menu Controller -->
-    <div id="floating-menu-container" style="position:fixed; z-index:10000; top:calc(max(env(safe-area-inset-top, 54px), 64px) + 8px); right:16px; user-select:none; touch-action:none;">
+    <!-- Floating Menu: Moved to top-left buffer area so it NEVER blocks the Connect button on the right -->
+    <div id="floating-menu-container" style="position:fixed; z-index:10000; top:14px; left:16px; user-select:none; touch-action:none;">
       
       <!-- Collapsed Pill -->
-      <div id="menu-pill" class="floating-glass" style="display:flex; align-items:center; gap:8px; padding:8px 14px; border-radius:9999px; box-shadow:0 10px 25px rgba(0,0,0,0.5); cursor:grab;">
-        <svg style="width:14px; height:14px; color:rgba(255,255,255,0.5);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="19" r="1"></circle>
-          <circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="19" r="1"></circle>
+      <div id="menu-pill" class="floating-glass" style="display:flex; align-items:center; gap:8px; padding:7px 13px; border-radius:9999px; box-shadow:0 8px 24px rgba(0,0,0,0.6); cursor:grab;">
+        <svg style="width:14px; height:14px; color:rgba(255,255,255,0.6);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>
         </svg>
         <span style="font-size:0.75rem; font-weight:600; color:rgba(255,255,255,0.95);">Menu</span>
       </div>
 
       <!-- Expanded Bar -->
-      <div id="menu-expanded" class="floating-glass" style="display:none; align-items:center; gap:6px; padding:6px; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.5);">
-        <button type="button" onclick="exitApp()" style="height:36px; padding:0 12px; border-radius:10px; background:rgba(255,255,255,0.15); color:white; font-size:0.75rem; font-weight:600; display:flex; align-items:center; gap:4px; cursor:pointer;">
+      <div id="menu-expanded" class="floating-glass" style="display:none; align-items:center; gap:6px; padding:6px; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.6);">
+        <button type="button" onclick="exitApp()" style="height:34px; padding:0 12px; border-radius:10px; background:rgba(255,255,255,0.15); color:white; font-size:0.75rem; font-weight:600; display:flex; align-items:center; gap:4px; cursor:pointer;">
           <svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="15 18 9 12 15 6"></polyline>
           </svg>
           <span>Exit</span>
         </button>
 
-        <button type="button" onclick="downloadAppLogs()" style="width:36px; height:36px; border-radius:10px; background:rgba(255,255,255,0.15); color:white; display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Download Logs">
+        <button type="button" onclick="downloadAppLogs()" style="width:34px; height:34px; border-radius:10px; background:rgba(255,255,255,0.15); color:white; display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Download Logs">
           <svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
             <polyline points="14 2 14 8 20 8"></polyline>
@@ -259,7 +258,7 @@
           </svg>
         </button>
 
-        <button type="button" onclick="reloadApp()" style="width:36px; height:36px; border-radius:10px; background:rgba(255,255,255,0.15); color:white; display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Reload">
+        <button type="button" onclick="reloadApp()" style="width:34px; height:34px; border-radius:10px; background:rgba(255,255,255,0.15); color:white; display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Reload">
           <svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
             <path d="M3 3v5h5"></path>
@@ -268,7 +267,7 @@
           </svg>
         </button>
 
-        <button type="button" onclick="collapseFloatingMenu()" style="width:36px; height:36px; border-radius:10px; background:rgba(255,255,255,0.15); color:rgba(255,255,255,0.8); display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Collapse">
+        <button type="button" onclick="collapseFloatingMenu()" style="width:34px; height:34px; border-radius:10px; background:rgba(255,255,255,0.15); color:rgba(255,255,255,0.8); display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Collapse">
           <svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -294,7 +293,7 @@
 
   <script>
     // =========================================================================
-    // PERSISTENT CRASH LOGGER (CROSS-FRAME & RESILIENT ACROSS RESTARTS)
+    // PERSISTENT CRASH LOGGER
     // =========================================================================
     const LOG_KEY = 'weblauncher_debug_log_v2';
     let systemLogs = [];
@@ -379,14 +378,11 @@
     let isEditMode = false;
     let currentRunningApp = null;
 
-    // Expose Native Bluetooth LE plugin globally
-    window.BluetoothLe = null;
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BluetoothLe) {
-      window.BluetoothLe = window.Capacitor.Plugins.BluetoothLe;
-      window.BluetoothLe.initialize().catch((err) => {
-        recordLog('BLE_INIT_WARN', err.message || err);
-      });
+    // Dynamically expose Native Bluetooth LE plugin
+    function getCapacitorBle() {
+      return window.Capacitor?.Plugins?.BluetoothLe || null;
     }
+    window.BluetoothLe = getCapacitorBle();
 
     function initDatabase() {
       return new Promise((resolve, reject) => {
@@ -679,7 +675,7 @@
     }
 
     // ========================================================
-    // APP RUNTIME ENGINE (Direct srcdoc + Auto-Shield)
+    // APP RUNTIME ENGINE (Clean IFrame Loading)
     // ========================================================
     function launchApp(app) {
       if (!app || !app.code) {
@@ -700,7 +696,7 @@
       const iframe = document.getElementById('runtime-iframe');
       iframe.removeAttribute('src');
 
-      // Universal Safe-Area Guard: Prevents imported HTML files from rendering under the Dynamic Island
+      // Inject clean, collision-free box-sizing
       const shieldCss = `
         <style id="ios-island-shield">
           html, body {
@@ -717,16 +713,8 @@
         preparedHtml = shieldCss + preparedHtml;
       }
 
+      // Assign srcdoc cleanly without calling doc.write
       iframe.srcdoc = preparedHtml;
-
-      try {
-        const doc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (doc && (!doc.body || doc.body.innerHTML.trim() === '')) {
-          doc.open();
-          doc.write(preparedHtml);
-          doc.close();
-        }
-      } catch (err) {}
     }
 
     function exitApp() {
