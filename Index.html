@@ -43,6 +43,16 @@
       border: 1px solid rgba(255, 255, 255, 0.25);
     }
 
+    /* 60% default opacity for floating menu pill */
+    #menu-pill {
+      opacity: 0.6;
+      transition: opacity 0.2s ease, transform 0.15s ease;
+    }
+    #menu-pill:active, .is-dragging #menu-pill {
+      opacity: 1 !important;
+      transform: scale(1.04);
+    }
+
     .app-press:active {
       transform: scale(0.92);
       opacity: 0.85;
@@ -229,19 +239,19 @@
     <!-- Top Dynamic Island Buffer -->
     <div id="runtime-safe-top" style="width:100%; height:max(env(safe-area-inset-top, 54px), 64px); background:#000000; flex-shrink:0;"></div>
 
-    <!-- Floating Menu: Moved to top-left buffer area so it NEVER blocks the Connect button on the right -->
-    <div id="floating-menu-container" style="position:fixed; z-index:10000; top:14px; left:16px; user-select:none; touch-action:none;">
+    <!-- Floating Menu: Positioned safely below the status bar & freely draggable -->
+    <div id="floating-menu-container" style="position:fixed; z-index:10000; top:calc(max(env(safe-area-inset-top, 54px), 64px) + 12px); left:16px; user-select:none; -webkit-user-select:none; touch-action:none;">
       
-      <!-- Collapsed Pill -->
+      <!-- Collapsed Pill (60% Opacity) -->
       <div id="menu-pill" class="floating-glass" style="display:flex; align-items:center; gap:8px; padding:7px 13px; border-radius:9999px; box-shadow:0 8px 24px rgba(0,0,0,0.6); cursor:grab;">
-        <svg style="width:14px; height:14px; color:rgba(255,255,255,0.6);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg style="width:14px; height:14px; color:rgba(255,255,255,0.85);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>
         </svg>
         <span style="font-size:0.75rem; font-weight:600; color:rgba(255,255,255,0.95);">Menu</span>
       </div>
 
       <!-- Expanded Bar -->
-      <div id="menu-expanded" class="floating-glass" style="display:none; align-items:center; gap:6px; padding:6px; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.6);">
+      <div id="menu-expanded" class="floating-glass" style="display:none; align-items:center; gap:6px; padding:6px; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.7); opacity:1;">
         <button type="button" onclick="exitApp()" style="height:34px; padding:0 12px; border-radius:10px; background:rgba(255,255,255,0.15); color:white; font-size:0.75rem; font-weight:600; display:flex; align-items:center; gap:4px; cursor:pointer;">
           <svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="15 18 9 12 15 6"></polyline>
@@ -312,7 +322,6 @@
       if (prev) systemLogs = JSON.parse(prev);
     } catch (e) {}
 
-    // Expose logger directly to embedded iframes
     window.recordChildLog = function(level, msg) {
       recordLog(level, msg);
     };
@@ -378,7 +387,6 @@
     let isEditMode = false;
     let currentRunningApp = null;
 
-    // Dynamically expose Native Bluetooth LE plugin
     function getCapacitorBle() {
       return window.Capacitor?.Plugins?.BluetoothLe || null;
     }
@@ -696,7 +704,6 @@
       const iframe = document.getElementById('runtime-iframe');
       iframe.removeAttribute('src');
 
-      // Inject clean, collision-free box-sizing
       const shieldCss = `
         <style id="ios-island-shield">
           html, body {
@@ -713,7 +720,6 @@
         preparedHtml = shieldCss + preparedHtml;
       }
 
-      // Assign srcdoc cleanly without calling doc.write
       iframe.srcdoc = preparedHtml;
     }
 
@@ -736,11 +742,12 @@
     }
 
     // ========================================================
-    // FLOATING CONTROLLER LOGIC
+    // FLOATING CONTROLLER LOGIC (DRAGGABLE & TOUCH-SAFE)
     // ========================================================
     const floatingContainer = document.getElementById('floating-menu-container');
     const menuPill = document.getElementById('menu-pill');
     const menuExpanded = document.getElementById('menu-expanded');
+    const runtimeIframe = document.getElementById('runtime-iframe');
 
     let isDragging = false;
     let dragStartX = 0;
@@ -761,6 +768,13 @@
       initialLeft = rect.left;
       initialTop = rect.top;
 
+      floatingContainer.classList.add('is-dragging');
+
+      // Crucial: Prevent iframe from capturing pointer events while moving
+      if (runtimeIframe) {
+        runtimeIframe.style.pointerEvents = 'none';
+      }
+
       floatingContainer.setPointerCapture(e.pointerId);
     });
 
@@ -770,7 +784,7 @@
       const dx = e.clientX - dragStartX;
       const dy = e.clientY - dragStartY;
 
-      if (Math.hypot(dx, dy) > 5) {
+      if (!hasMoved && Math.hypot(dx, dy) > 4) {
         hasMoved = true;
       }
 
@@ -779,7 +793,7 @@
         let newLeft = initialLeft + dx;
         let newTop = initialTop + dy;
 
-        const margin = 12;
+        const margin = 10;
         const maxLeft = window.innerWidth - rect.width - margin;
         const maxTop = window.innerHeight - rect.height - margin;
 
@@ -789,12 +803,18 @@
         floatingContainer.style.left = `${newLeft}px`;
         floatingContainer.style.top = `${newTop}px`;
         floatingContainer.style.right = 'auto';
+        floatingContainer.style.bottom = 'auto';
       }
     });
 
-    floatingContainer.addEventListener('pointerup', (e) => {
+    function finishDrag(e) {
       if (!isDragging) return;
       isDragging = false;
+      floatingContainer.classList.remove('is-dragging');
+
+      if (runtimeIframe) {
+        runtimeIframe.style.pointerEvents = 'auto';
+      }
 
       try {
         floatingContainer.releasePointerCapture(e.pointerId);
@@ -803,12 +823,28 @@
       if (!hasMoved) {
         toggleFloatingMenu();
       }
-    });
+    }
+
+    floatingContainer.addEventListener('pointerup', finishDrag);
+    floatingContainer.addEventListener('pointercancel', finishDrag);
 
     function toggleFloatingMenu() {
       if (menuExpanded.style.display === 'none' || menuExpanded.style.display === '') {
         menuPill.style.display = 'none';
         menuExpanded.style.display = 'flex';
+
+        // Keep expanded menu inside viewport bounds
+        requestAnimationFrame(() => {
+          const rect = floatingContainer.getBoundingClientRect();
+          if (rect.right > window.innerWidth - 10) {
+            const shift = rect.right - (window.innerWidth - 10);
+            floatingContainer.style.left = `${Math.max(10, rect.left - shift)}px`;
+          }
+          if (rect.bottom > window.innerHeight - 10) {
+            const shift = rect.bottom - (window.innerHeight - 10);
+            floatingContainer.style.top = `${Math.max(10, rect.top - shift)}px`;
+          }
+        });
       } else {
         collapseFloatingMenu();
       }
