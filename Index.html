@@ -8,50 +8,27 @@
   <!-- Capacitor Native Runtime Bridge -->
   <script src="capacitor.js"></script>
 
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
-
-  <!-- Google Font: Inter -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-          },
-          colors: {
-            iosBg: '#090a10',
-            iosBlue: '#0A84FF',
-            iosRed: '#FF453A',
-            iosGreen: '#30D158',
-          },
-          boxShadow: {
-            'app-icon': '0 8px 24px -4px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.25)',
-          }
-        }
-      }
-    }
-  </script>
-
   <style>
-    .squircle {
-      border-radius: 22.5%;
+    /* 100% OFFLINE EMBEDDED STYLES (Zero external CDN fetches) */
+    *, ::before, ::after { box-sizing: border-box; border-width: 0; border-style: solid; border-color: #334155; margin: 0; padding: 0; }
+    html, body { height: 100%; width: 100%; }
+    body {
+      background-color: #090a10;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      /* Dynamic Island clearance for launcher home */
+      padding-top: max(env(safe-area-inset-top, 54px), 64px);
+      padding-bottom: max(env(safe-area-inset-bottom, 20px), 24px);
     }
-    
-    .no-scrollbar::-webkit-scrollbar {
-      display: none;
-    }
-    .no-scrollbar {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
+
+    .squircle { border-radius: 22.5%; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
     .glass-panel {
       background: rgba(22, 24, 32, 0.88);
@@ -60,17 +37,17 @@
       border: 1px solid rgba(255, 255, 255, 0.12);
     }
 
+    .floating-glass {
+      background: rgba(15, 23, 42, 0.75) !important;
+      backdrop-filter: blur(16px) saturate(160%);
+      -webkit-backdrop-filter: blur(16px) saturate(160%);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+    }
+
     .app-press:active {
       transform: scale(0.92);
       opacity: 0.85;
       transition: transform 0.15s ease, opacity 0.15s ease;
-    }
-
-    .safe-top {
-      padding-top: max(env(safe-area-inset-top, 48px), 54px);
-    }
-    .safe-bottom {
-      padding-bottom: max(env(safe-area-inset-bottom, 20px), 24px);
     }
 
     @keyframes jiggle {
@@ -78,194 +55,243 @@
       50% { transform: rotate(1.2deg); }
       100% { transform: rotate(-1deg); }
     }
-    .jiggle {
-      animation: jiggle 0.25s infinite ease-in-out;
-    }
+    .jiggle { animation: jiggle 0.25s infinite ease-in-out; }
 
-    /* 70% Opacity Floating Bar Styling */
-    .floating-glass {
-      background: rgba(15, 23, 42, 0.70) !important;
-      backdrop-filter: blur(16px) saturate(160%);
-      -webkit-backdrop-filter: blur(16px) saturate(160%);
-      border: 1px solid rgba(255, 255, 255, 0.22);
-    }
+    /* Gradients */
+    .from-blue-600 { background-image: linear-gradient(135deg, #2563eb, #4338ca); }
+    .from-purple-600 { background-image: linear-gradient(135deg, #9333ea, #4f46e5); }
+    .from-pink-600 { background-image: linear-gradient(135deg, #db2777, #e11d48); }
+    .from-amber-500 { background-image: linear-gradient(135deg, #f59e0b, #ea580c); }
+    .from-emerald-600 { background-image: linear-gradient(135deg, #059669, #0f766e); }
+    .from-cyan-500 { background-image: linear-gradient(135deg, #06b6d4, #2563eb); }
+    .from-fuchsia-600 { background-image: linear-gradient(135deg, #c026d3, #db2777); }
+    .from-red-600 { background-image: linear-gradient(135deg, #dc2626, #be123c); }
   </style>
 </head>
 
-<body class="h-full w-full overflow-hidden bg-iosBg text-white font-sans antialiased flex flex-col justify-between relative safe-top safe-bottom">
+<body>
 
   <!-- Ambient Wallpaper Background -->
-  <div class="fixed inset-0 pointer-events-none z-0 opacity-40">
-    <div class="absolute -top-[20%] -left-[10%] w-[80vw] h-[80vw] rounded-full bg-gradient-to-br from-indigo-600/30 via-blue-600/20 to-transparent blur-3xl"></div>
-    <div class="absolute top-[35%] -right-[15%] w-[70vw] h-[70vw] rounded-full bg-gradient-to-br from-purple-600/30 via-pink-600/10 to-transparent blur-3xl"></div>
+  <div style="position:fixed; inset:0; pointer-events:none; z-index:0; opacity:0.4;">
+    <div style="position:absolute; top:-20%; left:-10%; width:80vw; height:80vw; border-radius:9999px; background:radial-gradient(circle, rgba(79,70,229,0.3) 0%, transparent 70%); filter:blur(40px);"></div>
+    <div style="position:absolute; top:35%; right:-15%; width:70vw; height:70vw; border-radius:9999px; background:radial-gradient(circle, rgba(147,51,234,0.3) 0%, transparent 70%); filter:blur(40px);"></div>
   </div>
 
-  <!-- Top Navigation -->
-  <header class="relative z-20 w-full px-6 py-2 flex justify-between items-center">
+  <!-- Top Navigation Header -->
+  <header style="position:relative; z-index:20; width:100%; padding:0 24px 10px 24px; display:flex; justify-content:space-between; align-items:center;">
     <div>
-      <h1 class="text-xl font-bold tracking-tight text-white flex items-center space-x-2">
+      <h1 style="font-size:1.25rem; font-weight:700; letter-spacing:-0.02em; display:flex; align-items:center; gap:8px;">
         <span>App Launcher</span>
-        <span id="app-counter" class="text-xs px-2.5 py-0.5 rounded-full bg-white/10 text-white/70 font-medium">0 Apps</span>
+        <span id="app-counter" style="font-size:0.75rem; padding:2px 10px; border-radius:9999px; background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.7); font-weight:500;">0 Apps</span>
       </h1>
     </div>
 
     <!-- Actions -->
-    <div class="flex items-center space-x-2.5">
-      <button onclick="openModal('backup-modal')" class="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white/80 flex items-center justify-center transition border border-white/10" title="Backup & Restore">
-        <i data-lucide="archive" class="w-4 h-4"></i>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <button type="button" onclick="openModal('backup-modal')" style="width:36px; height:36px; border-radius:9999px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.1); color:white; display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Backup & Restore">
+        <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="21 8 21 21 3 21 3 8"></polyline>
+          <rect x="1" y="3" width="22" height="5"></rect>
+          <line x1="10" y1="12" x2="14" y2="12"></line>
+        </svg>
       </button>
-      <button id="edit-toggle-btn" onclick="toggleEditMode()" class="h-9 px-3.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-semibold text-white/90 backdrop-blur-md transition border border-white/10">
+      <button type="button" id="edit-toggle-btn" onclick="toggleEditMode()" style="height:36px; padding:0 14px; border-radius:9999px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.1); color:white; font-size:0.75rem; font-weight:600; cursor:pointer;">
         Edit
       </button>
-      <button onclick="triggerFilePicker()" class="w-9 h-9 rounded-full bg-iosBlue text-white hover:bg-blue-600 active:scale-95 transition shadow-lg flex items-center justify-center" title="Import App">
-        <i data-lucide="plus" class="w-4 h-4"></i>
+      <button type="button" onclick="triggerFilePicker()" style="width:36px; height:36px; border-radius:9999px; background:#0A84FF; color:white; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 4px 12px rgba(10,132,255,0.4);" title="Import App">
+        <svg style="width:18px; height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
       </button>
     </div>
   </header>
 
   <!-- Main Container: Dynamic App Grid -->
-  <main class="relative z-10 flex-1 overflow-y-auto no-scrollbar px-6 py-4 max-w-lg mx-auto w-full">
-    <div id="empty-state" class="hidden flex-col items-center justify-center h-full text-center py-20 space-y-4">
-      <div class="w-16 h-16 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40">
-        <i data-lucide="download-cloud" class="w-8 h-8"></i>
+  <main style="position:relative; z-index:10; flex:1; overflow-y:auto; padding:8px 24px; max-width:540px; margin:0 auto; width:100%;" class="no-scrollbar">
+    <div id="empty-state" style="display:none; flex-direction:column; align-items:center; justify-content:center; height:100%; text-align:center; padding:60px 0; gap:16px;">
+      <div style="width:64px; height:64px; border-radius:24px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.4);">
+        <svg style="width:32px; height:32px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path>
+          <path d="M12 12v9"></path>
+          <path d="m8 17 4 4 4-4"></path>
+        </svg>
       </div>
       <div>
-        <h2 class="text-lg font-bold text-white/90">No Apps Installed</h2>
-        <p class="text-xs text-white/50 max-w-xs mt-1">Import single-file HTML apps or restore a saved backup.</p>
+        <h2 style="font-size:1.1rem; font-weight:700; color:rgba(255,255,255,0.9);">No Apps Installed</h2>
+        <p style="font-size:0.75rem; color:rgba(255,255,255,0.5); max-width:260px; margin-top:4px;">Import single-file HTML apps or restore a saved backup.</p>
       </div>
-      <div class="flex gap-2">
-        <button onclick="triggerFilePicker()" class="px-4 py-2.5 rounded-2xl bg-iosBlue hover:bg-blue-600 text-white text-xs font-semibold active:scale-95 transition shadow-lg flex items-center space-x-1.5">
-          <i data-lucide="plus" class="w-4 h-4"></i>
+      <div style="display:flex; gap:10px;">
+        <button type="button" onclick="triggerFilePicker()" style="padding:10px 16px; border-radius:14px; background:#0A84FF; color:white; font-size:0.75rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
+          <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
           <span>Import HTML</span>
         </button>
-        <button onclick="triggerBackupRestore()" class="px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold active:scale-95 transition flex items-center space-x-1.5">
-          <i data-lucide="upload" class="w-4 h-4"></i>
+        <button type="button" onclick="triggerBackupRestore()" style="padding:10px 16px; border-radius:14px; background:rgba(255,255,255,0.1); color:white; font-size:0.75rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
+          <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
           <span>Restore Backup</span>
         </button>
       </div>
     </div>
 
-    <div id="app-grid" class="grid grid-cols-3 sm:grid-cols-4 gap-6 py-4 justify-items-center"></div>
+    <div id="app-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(76px, 1fr)); gap:24px 16px; padding:16px 0; justify-items:center;"></div>
   </main>
 
-  <footer class="relative z-20 px-6 py-2 flex justify-center items-center text-[11px] text-white/40">
+  <footer style="position:relative; z-index:20; padding:4px 24px; display:flex; justify-content:center; font-size:11px; color:rgba(255,255,255,0.4);">
     <span>Tap an app to launch full-screen</span>
   </footer>
 
-  <!-- Hidden File Inputs -->
-  <input type="file" id="file-picker" accept=".html,.htm,text/html,text/plain,.json,application/json" class="hidden" onchange="handleFileSelected(event)">
-  <input type="file" id="backup-picker" accept=".json,application/json,text/plain" class="hidden" onchange="handleBackupSelected(event)">
+  <!-- Hidden File Pickers -->
+  <input type="file" id="file-picker" accept=".html,.htm,text/html,text/plain,.json,application/json" style="display:none;" onchange="handleFileSelected(event)">
+  <input type="file" id="backup-picker" accept=".json,application/json,text/plain" style="display:none;" onchange="handleBackupSelected(event)">
 
   <!-- BACKUP & RESTORE MODAL -->
-  <div id="backup-modal" class="fixed inset-0 z-50 hidden bg-black/70 backdrop-blur-xl justify-center items-center p-4">
-    <div class="glass-panel w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4">
-      <div class="flex justify-between items-center border-b border-white/10 pb-3">
-        <div class="flex items-center space-x-2">
-          <i data-lucide="archive" class="w-5 h-5 text-iosBlue"></i>
-          <h2 class="text-base font-bold text-white">Backup & Restore</h2>
+  <div id="backup-modal" style="position:fixed; inset:0; z-index:50; display:none; background:rgba(0,0,0,0.7); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); align-items:center; justify-content:center; padding:16px;">
+    <div class="glass-panel" style="width:100%; max-width:360px; border-radius:24px; padding:24px; display:flex; flex-direction:column; gap:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <svg style="width:20px; height:20px; color:#0A84FF;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="21 8 21 21 3 21 3 8"></polyline>
+            <rect x="1" y="3" width="22" height="5"></rect>
+            <line x1="10" y1="12" x2="14" y2="12"></line>
+          </svg>
+          <h2 style="font-size:1rem; font-weight:700; color:white;">Backup &amp; Restore</h2>
         </div>
-        <button onclick="closeModal('backup-modal')" class="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/70">
-          <i data-lucide="x" class="w-4 h-4"></i>
+        <button type="button" onclick="closeModal('backup-modal')" style="background:rgba(255,255,255,0.1); border-radius:9999px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.7); cursor:pointer;">
+          <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
         </button>
       </div>
 
-      <p class="text-xs text-white/60 leading-relaxed">
-        Export your apps into a backup file. If you reinstall or update the IPA, restore the backup to reload all your apps instantly.
+      <p style="font-size:0.75rem; color:rgba(255,255,255,0.6); line-height:1.5;">
+        Export your apps into a backup JSON file or restore them after updating the IPA.
       </p>
 
-      <div class="space-y-2.5 pt-2">
-        <button onclick="exportAllApps()" class="w-full py-3 px-4 rounded-xl bg-iosBlue/20 hover:bg-iosBlue/30 border border-iosBlue/40 text-iosBlue font-semibold text-xs flex items-center justify-center space-x-2 active:scale-98 transition">
-          <i data-lucide="share" class="w-4 h-4"></i>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <button type="button" onclick="exportAllApps()" style="width:100%; padding:12px 16px; border-radius:14px; background:rgba(10,132,255,0.15); border:1px solid rgba(10,132,255,0.4); color:#0A84FF; font-weight:600; font-size:0.75rem; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+          <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+          </svg>
           <span>Export All Apps (Save Backup)</span>
         </button>
 
-        <button onclick="triggerBackupRestore()" class="w-full py-3 px-4 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-white font-semibold text-xs flex items-center justify-center space-x-2 active:scale-98 transition">
-          <i data-lucide="upload" class="w-4 h-4"></i>
+        <button type="button" onclick="triggerBackupRestore()" style="width:100%; padding:12px 16px; border-radius:14px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.1); color:white; font-weight:600; font-size:0.75rem; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+          <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
           <span>Restore Backup (.json)</span>
         </button>
 
-        <button onclick="confirmWipeAll()" class="w-full py-2.5 px-4 rounded-xl bg-iosRed/20 hover:bg-iosRed/30 border border-iosRed/30 text-iosRed font-semibold text-xs flex items-center justify-center space-x-1.5 active:scale-98 transition">
-          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+        <button type="button" onclick="confirmWipeAll()" style="width:100%; padding:10px 16px; border-radius:14px; background:rgba(255,69,58,0.15); border:1px solid rgba(255,69,58,0.3); color:#FF453A; font-weight:600; font-size:0.75rem; display:flex; align-items:center; justify-content:center; gap:6px; cursor:pointer;">
+          <svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
           <span>Delete All Apps</span>
         </button>
       </div>
 
-      <div class="pt-2 text-center">
-        <button onclick="closeModal('backup-modal')" class="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white">
-          Done
-        </button>
-      </div>
+      <button type="button" onclick="closeModal('backup-modal')" style="width:100%; padding:10px; border-radius:12px; background:rgba(255,255,255,0.1); font-size:0.75rem; font-weight:600; color:white; cursor:pointer;">
+        Done
+      </button>
     </div>
   </div>
 
-  <!-- ======================================================== -->
-  <!-- FULLSCREEN APP RUNTIME WITH 70% DRAGGABLE FLOATING MENU  -->
-  <!-- ======================================================== -->
-  <div id="runtime-modal" class="fixed inset-0 z-50 hidden bg-black flex-col">
+  <!-- ========================================================================= -->
+  <!-- FULLSCREEN APP RUNTIME WITH BUILT-IN DYNAMIC ISLAND & STATUS BAR SHIELD  -->
+  <!-- ========================================================================= -->
+  <div id="runtime-modal" style="position:fixed; inset:0; z-index:9999; display:none; background:#000000; flex-direction:column; overflow:hidden;">
     
-    <!-- FLOATING 70% OPACITY DRAGGABLE CONTROLLER -->
-    <div id="floating-menu-container" class="fixed z-[100] select-none touch-none" style="top: 60px; right: 16px;">
+    <!-- 1. DYNAMIC ISLAND & STATUS BAR BUFFER (Guarantees no iframe ever touches the island) -->
+    <div id="runtime-safe-top" style="width:100%; height:max(env(safe-area-inset-top, 54px), 64px); background:#000000; flex-shrink:0;"></div>
+
+    <!-- 2. FLOATING MENU CONTROLLER (Positioned right below Dynamic Island buffer) -->
+    <div id="floating-menu-container" style="position:fixed; z-index:10000; top:calc(max(env(safe-area-inset-top, 54px), 64px) + 8px); right:16px; user-select:none; touch-action:none;">
       
-      <!-- Collapsed Draggable Pill (70% Opacity) -->
-      <div id="menu-pill" class="floating-glass flex items-center space-x-2 px-3.5 py-2.5 rounded-full shadow-2xl cursor-grab active:cursor-grabbing active:scale-95 transition-transform">
-        <i data-lucide="grip-vertical" class="w-3.5 h-3.5 text-white/40"></i>
-        <i data-lucide="menu" class="w-3.5 h-3.5 text-white/90"></i>
-        <span class="text-xs font-semibold text-white/95">Menu</span>
+      <!-- Collapsed Draggable Pill -->
+      <div id="menu-pill" class="floating-glass" style="display:flex; align-items:center; gap:8px; padding:8px 14px; border-radius:9999px; box-shadow:0 10px 25px rgba(0,0,0,0.5); cursor:grab;">
+        <svg style="width:14px; height:14px; color:rgba(255,255,255,0.5);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="19" r="1"></circle>
+          <circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="19" r="1"></circle>
+        </svg>
+        <span style="font-size:0.75rem; font-weight:600; color:rgba(255,255,255,0.95);">Menu</span>
       </div>
 
-      <!-- Expanded Floating Control Bar (70% Opacity) -->
-      <div id="menu-expanded" class="floating-glass hidden items-center space-x-1.5 p-1.5 rounded-2xl shadow-2xl">
-        <div class="px-1.5 py-1 flex items-center cursor-grab active:cursor-grabbing text-white/40">
-          <i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i>
-        </div>
-        <button onclick="exitApp()" class="h-9 px-3 rounded-xl bg-white/15 hover:bg-white/25 active:scale-95 text-white text-xs font-semibold flex items-center space-x-1 transition border border-white/10">
-          <i data-lucide="chevron-left" class="w-3.5 h-3.5"></i>
+      <!-- Expanded Floating Control Bar -->
+      <div id="menu-expanded" class="floating-glass" style="display:none; align-items:center; gap:6px; padding:6px; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.5);">
+        <button type="button" onclick="exitApp()" style="height:36px; padding:0 12px; border-radius:10px; background:rgba(255,255,255,0.15); color:white; font-size:0.75rem; font-weight:600; display:flex; align-items:center; gap:4px; cursor:pointer;">
+          <svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
           <span>Exit</span>
         </button>
-        <button onclick="reloadApp()" class="w-9 h-9 rounded-xl bg-white/15 hover:bg-white/25 active:scale-95 text-white flex items-center justify-center transition border border-white/10" title="Reload">
-          <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+        <button type="button" onclick="reloadApp()" style="width:36px; height:36px; border-radius:10px; background:rgba(255,255,255,0.15); color:white; display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Reload">
+          <svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+            <path d="M3 3v5h5"></path>
+            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path>
+            <path d="M16 21h5v-5"></path>
+          </svg>
         </button>
-        <button onclick="collapseFloatingMenu()" class="w-9 h-9 rounded-xl bg-white/15 hover:bg-white/25 active:scale-95 text-white/80 flex items-center justify-center transition border border-white/10" title="Collapse">
-          <i data-lucide="x" class="w-3.5 h-3.5"></i>
+        <button type="button" onclick="collapseFloatingMenu()" style="width:36px; height:36px; border-radius:10px; background:rgba(255,255,255,0.15); color:rgba(255,255,255,0.8); display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Collapse">
+          <svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
         </button>
       </div>
 
     </div>
 
-    <!-- Fullscreen App IFrame with Bluetooth & Web-Share support enabled -->
-    <div class="flex-1 w-full h-full relative bg-black overflow-hidden">
-      <iframe id="runtime-iframe" class="w-full h-full border-0 block" allow="bluetooth; web-share" sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"></iframe>
+    <!-- 3. SAFE IFRAME VIEWPORT (Completely bounded inside the safe zone) -->
+    <div style="flex:1; width:100%; min-height:0; position:relative; background:#000000; overflow:hidden;">
+      <iframe id="runtime-iframe" style="width:100%; height:100%; border:0; display:block;" allow="bluetooth; web-share"></iframe>
     </div>
+
+    <!-- 4. BOTTOM HOME BAR BUFFER -->
+    <div id="runtime-safe-bottom" style="width:100%; height:max(env(safe-area-inset-bottom, 20px), 24px); background:#000000; flex-shrink:0;"></div>
   </div>
 
   <!-- Toast Notification -->
-  <div id="toast" class="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 hidden px-4 py-2 rounded-full glass-panel border border-white/20 text-xs font-semibold text-white shadow-xl transition-all">
+  <div id="toast" class="glass-panel" style="position:fixed; bottom:48px; left:50%; transform:translateX(-50%); z-index:99999; display:none; padding:8px 18px; border-radius:9999px; font-size:12px; font-weight:600; color:white; box-shadow:0 8px 24px rgba(0,0,0,0.5);">
     Notification
   </div>
 
   <script>
     const GRADIENTS = [
-      "from-blue-600 to-indigo-600",
-      "from-purple-600 to-indigo-700",
-      "from-pink-600 to-rose-600",
-      "from-amber-500 to-orange-600",
-      "from-emerald-600 to-teal-700",
-      "from-cyan-500 to-blue-600",
-      "from-fuchsia-600 to-pink-600",
-      "from-red-600 to-rose-700"
+      "from-blue-600",
+      "from-purple-600",
+      "from-pink-600",
+      "from-amber-500",
+      "from-emerald-600",
+      "from-cyan-500",
+      "from-fuchsia-600",
+      "from-red-600"
     ];
 
     let db;
     let apps = [];
     let isEditMode = false;
-    let activeAppBlobUrl = null;
+    let currentRunningApp = null;
 
-    // Initialize Capacitor Native Bluetooth LE plugin and expose globally
+    // Expose Capacitor Native Bluetooth LE plugin globally to child iframes
     window.BluetoothLe = null;
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BluetoothLe) {
       window.BluetoothLe = window.Capacitor.Plugins.BluetoothLe;
       window.BluetoothLe.initialize().catch((err) => {
-        console.warn("Bluetooth initialize err:", err);
+        console.warn("Bluetooth initialize note:", err);
       });
     }
 
@@ -312,7 +338,11 @@
         const tx = db.transaction('apps', 'readwrite');
         const store = tx.objectStore('apps');
         store.delete(id);
+        if (!isNaN(Number(id))) {
+          store.delete(Number(id));
+        }
         tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
       });
     }
 
@@ -334,53 +364,66 @@
       counter.innerText = `${apps.length} App${apps.length === 1 ? '' : 's'}`;
 
       if (apps.length === 0) {
-        emptyState.classList.remove('hidden');
-        emptyState.classList.add('flex');
+        emptyState.style.display = 'flex';
         return;
       } else {
-        emptyState.classList.add('hidden');
-        emptyState.classList.remove('flex');
+        emptyState.style.display = 'none';
       }
 
       apps.forEach((app) => {
+        const appIdStr = escapeHtml(String(app.id));
         const tile = document.createElement('div');
-        tile.className = "flex flex-col items-center group relative cursor-pointer";
+        tile.style.cssText = "display:flex; flex-direction:column; align-items:center; position:relative; cursor:pointer;";
+        
+        tile.onclick = (e) => {
+          if (e.target.closest('.delete-btn')) return;
+          handleTileClick(app.id);
+        };
 
         tile.innerHTML = `
-          <div class="relative ${isEditMode ? 'jiggle' : ''}">
-            <button onclick="handleTileClick(${app.id})" class="w-16 h-16 sm:w-20 sm:h-20 squircle bg-gradient-to-tr ${app.gradient} flex items-center justify-center text-white shadow-app-icon app-press relative overflow-hidden">
-              <span class="text-2xl font-bold tracking-tight">${app.name.charAt(0).toUpperCase()}</span>
+          <div class="relative ${isEditMode ? 'jiggle' : ''}" style="position:relative;">
+            <button type="button" class="squircle ${app.gradient} app-press" style="width:68px; height:68px; display:flex; align-items:center; justify-content:center; color:white; border:none; box-shadow:0 8px 24px -4px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.25); cursor:pointer; pointer-events:none;">
+              <span style="font-size:1.6rem; font-weight:700; letter-spacing:-0.03em;">${escapeHtml(app.name.charAt(0).toUpperCase())}</span>
             </button>
             ${isEditMode ? `
-              <button onclick="removeApp(event, ${app.id})" class="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-iosRed text-white flex items-center justify-center shadow-lg border-2 border-slate-950 z-30">
-                <i data-lucide="x" class="w-3.5 h-3.5 stroke-[3]"></i>
+              <button type="button" onclick="removeApp(event, '${appIdStr}')" class="delete-btn" style="position:absolute; top:-6px; right:-6px; width:24px; height:24px; border-radius:9999px; background:#FF453A; color:white; display:flex; align-items:center; justify-content:center; border:2px solid #090a10; z-index:30; cursor:pointer;">
+                <svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
               </button>
             ` : ''}
           </div>
-          <span class="mt-2 text-xs font-semibold text-white/90 truncate w-20 text-center tracking-tight drop-shadow-sm">${escapeHtml(app.name)}</span>
+          <span style="margin-top:8px; font-size:12px; font-weight:600; color:rgba(255,255,255,0.9); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:80px; text-align:center; pointer-events:none;">${escapeHtml(app.name)}</span>
         `;
         grid.appendChild(tile);
       });
 
       if (!isEditMode) {
         const addTile = document.createElement('div');
-        addTile.className = "flex flex-col items-center group cursor-pointer";
+        addTile.style.cssText = "display:flex; flex-direction:column; align-items:center; cursor:pointer;";
+        addTile.onclick = triggerFilePicker;
         addTile.innerHTML = `
-          <button onclick="triggerFilePicker()" class="w-16 h-16 sm:w-20 sm:h-20 squircle bg-white/5 hover:bg-white/10 border-2 border-dashed border-white/20 hover:border-white/40 flex flex-col items-center justify-center text-white/40 hover:text-white/80 transition app-press">
-            <i data-lucide="plus" class="w-6 h-6 stroke-[2]"></i>
+          <button type="button" class="squircle app-press" style="width:68px; height:68px; background:rgba(255,255,255,0.05); border:2px dashed rgba(255,255,255,0.2); display:flex; flex-direction:column; align-items:center; justify-content:center; color:rgba(255,255,255,0.4); cursor:pointer; pointer-events:none;">
+            <svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
           </button>
-          <span class="mt-2 text-xs font-medium text-white/40 truncate w-20 text-center">Add App</span>
+          <span style="margin-top:8px; font-size:12px; font-weight:500; color:rgba(255,255,255,0.4); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:80px; text-align:center; pointer-events:none;">Add App</span>
         `;
         grid.appendChild(addTile);
       }
-
-      lucide.createIcons();
     }
 
     function handleTileClick(id) {
       if (isEditMode) return;
-      const targetApp = apps.find(a => a.id === id);
-      if (targetApp) launchApp(targetApp);
+      const targetApp = apps.find(a => String(a.id) === String(id));
+      if (targetApp) {
+        launchApp(targetApp);
+      } else {
+        showToast("Error: App not found.");
+      }
     }
 
     function triggerFilePicker() {
@@ -427,7 +470,7 @@
 
     async function exportAllApps() {
       if (!apps || apps.length === 0) {
-        showToast("No apps installed to export!");
+        showToast("No apps to export!");
         return;
       }
 
@@ -448,10 +491,7 @@
         try {
           const file = new File([jsonStr], filename, { type: 'application/json' });
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              files: [file],
-              title: "WebLauncher Apps Backup"
-            });
+            await navigator.share({ files: [file], title: "WebLauncher Backup" });
             showToast("Backup saved!");
             closeModal('backup-modal');
             return;
@@ -541,14 +581,78 @@
       isEditMode = !isEditMode;
       const btn = document.getElementById('edit-toggle-btn');
       btn.innerText = isEditMode ? 'Done' : 'Edit';
-      btn.className = isEditMode 
-        ? 'h-9 px-3.5 rounded-full bg-iosBlue text-white text-xs font-bold transition shadow-md'
-        : 'h-9 px-3.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-semibold text-white/90 backdrop-blur-md transition border border-white/10';
+      btn.style.background = isEditMode ? '#0A84FF' : 'rgba(255,255,255,0.1)';
       renderLauncher();
     }
 
     // ========================================================
-    // 70% OPACITY FLOATING DRAGGABLE CONTROLLER LOGIC
+    // APP RUNTIME ENGINE (Direct srcdoc + Auto-Shield)
+    // ========================================================
+    function launchApp(app) {
+      if (!app || !app.code) {
+        showToast("App code is empty.");
+        return;
+      }
+      currentRunningApp = app;
+
+      const modal = document.getElementById('runtime-modal');
+      collapseFloatingMenu();
+
+      modal.style.display = 'flex';
+      loadAppIntoIframe(app.code);
+    }
+
+    function loadAppIntoIframe(htmlCode) {
+      const iframe = document.getElementById('runtime-iframe');
+      iframe.removeAttribute('src');
+
+      // Universal Safe-Area Guard: Ensures imported HTML files never touch island
+      const shieldCss = `
+        <style id="ios-island-shield">
+          html, body {
+            margin: 0 !important;
+            box-sizing: border-box !important;
+          }
+        </style>
+      `;
+
+      let preparedHtml = htmlCode;
+      if (preparedHtml.includes('<head>')) {
+        preparedHtml = preparedHtml.replace('<head>', '<head>' + shieldCss);
+      } else {
+        preparedHtml = shieldCss + preparedHtml;
+      }
+
+      iframe.srcdoc = preparedHtml;
+
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (doc && (!doc.body || doc.body.innerHTML.trim() === '')) {
+          doc.open();
+          doc.write(preparedHtml);
+          doc.close();
+        }
+      } catch (err) {}
+    }
+
+    function exitApp() {
+      const modal = document.getElementById('runtime-modal');
+      const iframe = document.getElementById('runtime-iframe');
+      modal.style.display = 'none';
+      iframe.srcdoc = '';
+      iframe.src = 'about:blank';
+      currentRunningApp = null;
+    }
+
+    function reloadApp() {
+      if (currentRunningApp && currentRunningApp.code) {
+        loadAppIntoIframe(currentRunningApp.code);
+        showToast("App reloaded");
+      }
+    }
+
+    // ========================================================
+    // FLOATING CONTROLLER LOGIC
     // ========================================================
     const floatingContainer = document.getElementById('floating-menu-container');
     const menuPill = document.getElementById('menu-pill');
@@ -618,79 +722,36 @@
     });
 
     function toggleFloatingMenu() {
-      if (menuExpanded.classList.contains('hidden')) {
-        menuPill.classList.add('hidden');
-        menuExpanded.classList.remove('hidden');
-        menuExpanded.classList.add('flex');
+      if (menuExpanded.style.display === 'none' || menuExpanded.style.display === '') {
+        menuPill.style.display = 'none';
+        menuExpanded.style.display = 'flex';
       } else {
         collapseFloatingMenu();
       }
-      lucide.createIcons();
     }
 
     function collapseFloatingMenu() {
-      menuExpanded.classList.add('hidden');
-      menuExpanded.classList.remove('flex');
-      menuPill.classList.remove('hidden');
-      lucide.createIcons();
+      menuExpanded.style.display = 'none';
+      menuPill.style.display = 'flex';
     }
 
-    function launchApp(app) {
-      const iframe = document.getElementById('runtime-iframe');
-      collapseFloatingMenu();
-
-      if (activeAppBlobUrl) {
-        URL.revokeObjectURL(activeAppBlobUrl);
-      }
-      const blob = new Blob([app.code], { type: 'text/html;charset=utf-8' });
-      activeAppBlobUrl = URL.createObjectURL(blob);
-      iframe.src = activeAppBlobUrl;
-
-      document.getElementById('runtime-modal').classList.remove('hidden');
-      document.getElementById('runtime-modal').classList.add('flex');
-    }
-
-    function exitApp() {
-      const modal = document.getElementById('runtime-modal');
-      const iframe = document.getElementById('runtime-iframe');
-      modal.classList.add('hidden');
-      modal.classList.remove('flex');
-      iframe.src = 'about:blank';
-      if (activeAppBlobUrl) {
-        URL.revokeObjectURL(activeAppBlobUrl);
-        activeAppBlobUrl = null;
-      }
-    }
-
-    function reloadApp() {
-      const iframe = document.getElementById('runtime-iframe');
-      if (activeAppBlobUrl) {
-        iframe.src = activeAppBlobUrl;
-      }
-    }
-
-    // Modal Helpers
     function openModal(id) {
-      const el = document.getElementById(id);
-      el.classList.remove('hidden');
-      el.classList.add('flex');
-      lucide.createIcons();
+      document.getElementById(id).style.display = 'flex';
     }
 
     function closeModal(id) {
-      const el = document.getElementById(id);
-      el.classList.add('hidden');
-      el.classList.remove('flex');
+      document.getElementById(id).style.display = 'none';
     }
 
     function showToast(msg) {
       const toast = document.getElementById('toast');
       toast.innerText = msg;
-      toast.classList.remove('hidden');
-      setTimeout(() => toast.classList.add('hidden'), 2400);
+      toast.style.display = 'block';
+      setTimeout(() => toast.style.display = 'none', 2400);
     }
 
     function escapeHtml(str) {
+      if (typeof str !== 'string') return '';
       return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
@@ -698,7 +759,6 @@
       await initDatabase();
       await loadApps();
       renderLauncher();
-      lucide.createIcons();
     });
   </script>
 </body>
