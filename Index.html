@@ -37,7 +37,7 @@
     }
 
     .floating-glass {
-      background: rgba(15, 23, 42, 0.75) !important;
+      background: rgba(15, 23, 42, 0.80) !important;
       backdrop-filter: blur(16px) saturate(160%);
       -webkit-backdrop-filter: blur(16px) saturate(160%);
       border: 1px solid rgba(255, 255, 255, 0.22);
@@ -69,13 +69,13 @@
 
 <body>
 
-  <!-- Ambient Wallpaper Background -->
+  <!-- Background Ambient Glow -->
   <div style="position:fixed; inset:0; pointer-events:none; z-index:0; opacity:0.4;">
     <div style="position:absolute; top:-20%; left:-10%; width:80vw; height:80vw; border-radius:9999px; background:radial-gradient(circle, rgba(79,70,229,0.3) 0%, transparent 70%); filter:blur(40px);"></div>
     <div style="position:absolute; top:35%; right:-15%; width:70vw; height:70vw; border-radius:9999px; background:radial-gradient(circle, rgba(147,51,234,0.3) 0%, transparent 70%); filter:blur(40px);"></div>
   </div>
 
-  <!-- Top Navigation Header -->
+  <!-- Top Navigation Bar -->
   <header style="position:relative; z-index:20; width:100%; padding:0 24px 10px 24px; display:flex; justify-content:space-between; align-items:center;">
     <div>
       <h1 style="font-size:1.25rem; font-weight:700; letter-spacing:-0.02em; display:flex; align-items:center; gap:8px;">
@@ -84,9 +84,9 @@
       </h1>
     </div>
 
-    <!-- Actions -->
+    <!-- Top Action Buttons -->
     <div style="display:flex; align-items:center; gap:8px;">
-      <button type="button" onclick="downloadAppLogs()" style="width:36px; height:36px; border-radius:9999px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.15); color:white; display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Download Crash / Debug Log">
+      <button type="button" onclick="downloadAppLogs()" style="width:36px; height:36px; border-radius:9999px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.15); color:white; display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Download Crash / Debug Log to Files">
         <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
           <polyline points="14 2 14 8 20 8"></polyline>
@@ -94,16 +94,19 @@
           <line x1="9" y1="15" x2="15" y2="15"></line>
         </svg>
       </button>
-      <button type="button" onclick="openModal('backup-modal')" style="width:36px; height:36px; border-radius:9999px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.1); color:white; display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Backup & Restore">
+
+      <button type="button" onclick="openModal('backup-modal')" style="width:36px; height:36px; border-radius:9999px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.1); color:white; display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Backup & Diagnostics">
         <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="21 8 21 21 3 21 3 8"></polyline>
           <rect x="1" y="3" width="22" height="5"></rect>
           <line x1="10" y1="12" x2="14" y2="12"></line>
         </svg>
       </button>
+
       <button type="button" id="edit-toggle-btn" onclick="toggleEditMode()" style="height:36px; padding:0 14px; border-radius:9999px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.1); color:white; font-size:0.75rem; font-weight:600; cursor:pointer;">
         Edit
       </button>
+
       <button type="button" onclick="triggerFilePicker()" style="width:36px; height:36px; border-radius:9999px; background:#0A84FF; color:white; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 4px 12px rgba(10,132,255,0.4);" title="Import App">
         <svg style="width:18px; height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -113,7 +116,7 @@
     </div>
   </header>
 
-  <!-- Main Container: Dynamic App Grid -->
+  <!-- App Grid -->
   <main style="position:relative; z-index:10; flex:1; overflow-y:auto; padding:8px 24px; max-width:540px; margin:0 auto; width:100%;" class="no-scrollbar">
     <div id="empty-state" style="display:none; flex-direction:column; align-items:center; justify-content:center; height:100%; text-align:center; padding:60px 0; gap:16px;">
       <div style="width:64px; height:64px; border-radius:24px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.4);">
@@ -125,7 +128,7 @@
       </div>
       <div>
         <h2 style="font-size:1.1rem; font-weight:700; color:rgba(255,255,255,0.9);">No Apps Installed</h2>
-        <p style="font-size:0.75rem; color:rgba(255,255,255,0.5); max-width:260px; margin-top:4px;">Import single-file HTML apps or restore a saved backup.</p>
+        <p style="font-size:0.75rem; color:rgba(255,255,255,0.5); max-width:260px; margin-top:4px;">Import HTML apps or restore a saved backup.</p>
       </div>
       <div style="display:flex; gap:10px;">
         <button type="button" onclick="triggerFilePicker()" style="padding:10px 16px; border-radius:14px; background:#0A84FF; color:white; font-size:0.75rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
@@ -153,12 +156,11 @@
     <span>Tap an app to launch full-screen</span>
   </footer>
 
-  <!-- Hidden File Pickers -->
   <input type="file" id="file-picker" accept=".html,.htm,text/html,text/plain,.json,application/json" style="display:none;" onchange="handleFileSelected(event)">
   <input type="file" id="backup-picker" accept=".json,application/json,text/plain" style="display:none;" onchange="handleBackupSelected(event)">
 
-  <!-- BACKUP & RESTORE MODAL -->
-  <div id="backup-modal" style="position:fixed; inset:0; z-index:50; display:none; background:rgba(0,0,0,0.7); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); align-items:center; justify-content:center; padding:16px;">
+  <!-- BACKUP & DIAGNOSTICS MODAL -->
+  <div id="backup-modal" style="position:fixed; inset:0; z-index:50; display:none; background:rgba(0,0,0,0.75); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); align-items:center; justify-content:center; padding:16px;">
     <div class="glass-panel" style="width:100%; max-width:360px; border-radius:24px; padding:24px; display:flex; flex-direction:column; gap:16px;">
       <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:12px;">
         <div style="display:flex; align-items:center; gap:8px;">
@@ -185,7 +187,7 @@
             <line x1="12" y1="18" x2="12" y2="12"></line>
             <line x1="9" y1="15" x2="15" y2="15"></line>
           </svg>
-          <span>Download App / Crash Log (.txt)</span>
+          <span>Save Crash / Debug Log to Files</span>
         </button>
 
         <button type="button" onclick="exportAllApps()" style="width:100%; padding:12px 16px; border-radius:14px; background:rgba(10,132,255,0.15); border:1px solid rgba(10,132,255,0.4); color:#0A84FF; font-weight:600; font-size:0.75rem; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
@@ -221,16 +223,16 @@
     </div>
   </div>
 
-  <!-- FULLSCREEN APP RUNTIME WITH DYNAMIC ISLAND & STATUS BAR SHIELD -->
+  <!-- FULLSCREEN APP RUNTIME -->
   <div id="runtime-modal" style="position:fixed; inset:0; z-index:9999; display:none; background:#000000; flex-direction:column; overflow:hidden;">
     
-    <!-- Dynamic Island Spacer -->
+    <!-- Top Dynamic Island Buffer -->
     <div id="runtime-safe-top" style="width:100%; height:max(env(safe-area-inset-top, 54px), 64px); background:#000000; flex-shrink:0;"></div>
 
     <!-- Floating Menu Controller -->
     <div id="floating-menu-container" style="position:fixed; z-index:10000; top:calc(max(env(safe-area-inset-top, 54px), 64px) + 8px); right:16px; user-select:none; touch-action:none;">
       
-      <!-- Collapsed Draggable Pill -->
+      <!-- Collapsed Pill -->
       <div id="menu-pill" class="floating-glass" style="display:flex; align-items:center; gap:8px; padding:8px 14px; border-radius:9999px; box-shadow:0 10px 25px rgba(0,0,0,0.5); cursor:grab;">
         <svg style="width:14px; height:14px; color:rgba(255,255,255,0.5);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="19" r="1"></circle>
@@ -239,7 +241,7 @@
         <span style="font-size:0.75rem; font-weight:600; color:rgba(255,255,255,0.95);">Menu</span>
       </div>
 
-      <!-- Expanded Floating Control Bar -->
+      <!-- Expanded Bar -->
       <div id="menu-expanded" class="floating-glass" style="display:none; align-items:center; gap:6px; padding:6px; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.5);">
         <button type="button" onclick="exitApp()" style="height:36px; padding:0 12px; border-radius:10px; background:rgba(255,255,255,0.15); color:white; font-size:0.75rem; font-weight:600; display:flex; align-items:center; gap:4px; cursor:pointer;">
           <svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -247,6 +249,7 @@
           </svg>
           <span>Exit</span>
         </button>
+
         <button type="button" onclick="downloadAppLogs()" style="width:36px; height:36px; border-radius:10px; background:rgba(255,255,255,0.15); color:white; display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Download Logs">
           <svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -255,6 +258,7 @@
             <line x1="9" y1="15" x2="15" y2="15"></line>
           </svg>
         </button>
+
         <button type="button" onclick="reloadApp()" style="width:36px; height:36px; border-radius:10px; background:rgba(255,255,255,0.15); color:white; display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Reload">
           <svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
@@ -263,6 +267,7 @@
             <path d="M16 21h5v-5"></path>
           </svg>
         </button>
+
         <button type="button" onclick="collapseFloatingMenu()" style="width:36px; height:36px; border-radius:10px; background:rgba(255,255,255,0.15); color:rgba(255,255,255,0.8); display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Collapse">
           <svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -289,53 +294,54 @@
 
   <script>
     // =========================================================================
-    // PERSISTENT CRASH & LOG SYSTEM (SURVIVES CRASHES IN LOCALSTORAGE)
+    // PERSISTENT CRASH LOGGER (CROSS-FRAME & RESILIENT ACROSS RESTARTS)
     // =========================================================================
-    const LOG_STORAGE_KEY = 'weblauncher_crash_log_v1';
-    let inMemoryLogs = [];
+    const LOG_KEY = 'weblauncher_debug_log_v2';
+    let systemLogs = [];
 
-    function recordLog(level, message) {
-      const entry = `[${new Date().toISOString()}] [${level}] ${typeof message === 'object' ? JSON.stringify(message) : message}`;
-      inMemoryLogs.push(entry);
-      if (inMemoryLogs.length > 300) inMemoryLogs.shift();
-
+    function recordLog(level, msg) {
+      const line = `[${new Date().toISOString()}] [${level}] ${msg}`;
+      systemLogs.push(line);
+      if (systemLogs.length > 500) systemLogs.shift();
       try {
-        localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(inMemoryLogs));
+        localStorage.setItem(LOG_KEY, JSON.stringify(systemLogs));
       } catch (e) {}
     }
 
     try {
-      const saved = localStorage.getItem(LOG_STORAGE_KEY);
-      if (saved) inMemoryLogs = JSON.parse(saved);
+      const prev = localStorage.getItem(LOG_KEY);
+      if (prev) systemLogs = JSON.parse(prev);
     } catch (e) {}
 
-    const _origLog = console.log;
-    const _origWarn = console.warn;
-    const _origErr = console.error;
+    // Expose logger directly to embedded iframes
+    window.recordChildLog = function(level, msg) {
+      recordLog(level, msg);
+    };
 
-    console.log = function(...args) { recordLog('INFO', args.join(' ')); _origLog.apply(console, args); };
-    console.warn = function(...args) { recordLog('WARN', args.join(' ')); _origWarn.apply(console, args); };
-    console.error = function(...args) { recordLog('ERROR', args.join(' ')); _origErr.apply(console, args); };
+    const _cLog = console.log, _cWarn = console.warn, _cErr = console.error;
+    console.log = function(...a) { recordLog('INFO', a.join(' ')); _cLog.apply(console, a); };
+    console.warn = function(...a) { recordLog('WARN', a.join(' ')); _cWarn.apply(console, a); };
+    console.error = function(...a) { recordLog('ERROR', a.join(' ')); _cErr.apply(console, a); };
 
-    window.onerror = function(msg, url, line, col, error) {
-      recordLog('UNCAUGHT_ERR', `${msg} at ${url}:${line}:${col} stack: ${error?.stack || ''}`);
+    window.onerror = function(m, u, l, c, e) {
+      recordLog('FATAL_JS_ERR', `${m} at ${u}:${l}:${c} Stack: ${e?.stack || 'none'}`);
       return false;
     };
 
-    window.onunhandledrejection = function(event) {
-      recordLog('UNHANDLED_REJECTION', `Reason: ${event.reason?.message || event.reason}`);
+    window.onunhandledrejection = function(e) {
+      recordLog('UNHANDLED_REJECTION', `Reason: ${e.reason?.message || e.reason}`);
     };
 
-    recordLog('SYSTEM', 'WebLauncher booted. Screen: ' + window.innerWidth + 'x' + window.innerHeight);
+    recordLog('BOOT', `Launcher booted. Viewport: ${window.innerWidth}x${window.innerHeight}`);
 
     function downloadAppLogs() {
-      const header = `====================================================\nWEBLAUNCHER DIAGNOSTIC & CRASH LOG\nExported: ${new Date().toISOString()}\nUser-Agent: ${navigator.userAgent}\n====================================================\n\n`;
-      const fullLogText = header + inMemoryLogs.join('\n');
-      const filename = `weblauncher-log-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+      const header = `====================================================\nWEBLAUNCHER DIAGNOSTIC & CRASH LOG\nExported: ${new Date().toISOString()}\nUser-Agent: ${navigator.userAgent}\nTotal Entries: ${systemLogs.length}\n====================================================\n\n`;
+      const content = header + systemLogs.join('\n');
+      const filename = `weblauncher-crash-log-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
 
       if (navigator.share && navigator.canShare) {
         try {
-          const file = new File([fullLogText], filename, { type: 'text/plain' });
+          const file = new File([content], filename, { type: 'text/plain' });
           if (navigator.canShare({ files: [file] })) {
             navigator.share({ files: [file], title: "WebLauncher Crash Log" }).catch(() => {});
             return;
@@ -343,7 +349,7 @@
         } catch (e) {}
       }
 
-      const blob = new Blob([fullLogText], { type: 'text/plain;charset=utf-8' });
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -378,7 +384,7 @@
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BluetoothLe) {
       window.BluetoothLe = window.Capacitor.Plugins.BluetoothLe;
       window.BluetoothLe.initialize().catch((err) => {
-        console.warn("Bluetooth initialize note:", err);
+        recordLog('BLE_INIT_WARN', err.message || err);
       });
     }
 
@@ -681,6 +687,7 @@
         return;
       }
       currentRunningApp = app;
+      recordLog('APP_LAUNCH', `Launching: ${app.name} (ID: ${app.id})`);
 
       const modal = document.getElementById('runtime-modal');
       collapseFloatingMenu();
@@ -693,7 +700,7 @@
       const iframe = document.getElementById('runtime-iframe');
       iframe.removeAttribute('src');
 
-      // Universal Safe-Area Guard: Ensures imported HTML files never touch island
+      // Universal Safe-Area Guard: Prevents imported HTML files from rendering under the Dynamic Island
       const shieldCss = `
         <style id="ios-island-shield">
           html, body {
@@ -729,12 +736,14 @@
       iframe.srcdoc = '';
       iframe.src = 'about:blank';
       currentRunningApp = null;
+      recordLog('APP_EXIT', 'Closed app runtime.');
     }
 
     function reloadApp() {
       if (currentRunningApp && currentRunningApp.code) {
         loadAppIntoIframe(currentRunningApp.code);
         showToast("App reloaded");
+        recordLog('APP_RELOAD', `Reloaded: ${currentRunningApp.name}`);
       }
     }
 
