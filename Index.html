@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>HTML Launcher</title>
   
+  <!-- Capacitor Native Runtime Bridge -->
+  <script src="capacitor.js"></script>
+
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   
@@ -229,9 +232,9 @@
 
     </div>
 
-    <!-- True 100% Fullscreen App IFrame -->
+    <!-- Fullscreen App IFrame with Bluetooth & Web-Share support enabled -->
     <div class="flex-1 w-full h-full relative bg-black overflow-hidden">
-      <iframe id="runtime-iframe" class="w-full h-full border-0 block" allow="web-share" sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"></iframe>
+      <iframe id="runtime-iframe" class="w-full h-full border-0 block" allow="bluetooth; web-share" sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"></iframe>
     </div>
   </div>
 
@@ -256,6 +259,15 @@
     let apps = [];
     let isEditMode = false;
     let activeAppBlobUrl = null;
+
+    // Initialize Capacitor Native Bluetooth LE plugin and expose globally
+    window.BluetoothLe = null;
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BluetoothLe) {
+      window.BluetoothLe = window.Capacitor.Plugins.BluetoothLe;
+      window.BluetoothLe.initialize().catch((err) => {
+        console.warn("Bluetooth initialize err:", err);
+      });
+    }
 
     function initDatabase() {
       return new Promise((resolve, reject) => {
@@ -549,9 +561,8 @@
     let initialTop = 0;
     let hasMoved = false;
 
-    // Draggable gesture detection
     floatingContainer.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('button')) return; // Ignore drag if tapping action button
+      if (e.target.closest('button')) return;
 
       isDragging = true;
       hasMoved = false;
@@ -580,7 +591,6 @@
         let newLeft = initialLeft + dx;
         let newTop = initialTop + dy;
 
-        // Keep within safe screen boundaries
         const margin = 12;
         const maxLeft = window.innerWidth - rect.width - margin;
         const maxTop = window.innerHeight - rect.height - margin;
@@ -590,7 +600,7 @@
 
         floatingContainer.style.left = `${newLeft}px`;
         floatingContainer.style.top = `${newTop}px`;
-        floatingContainer.style.right = 'auto'; // Clear CSS right
+        floatingContainer.style.right = 'auto';
       }
     });
 
@@ -602,7 +612,6 @@
         floatingContainer.releasePointerCapture(e.pointerId);
       } catch (err) {}
 
-      // If it was a tap (not dragged), toggle expand/collapse
       if (!hasMoved) {
         toggleFloatingMenu();
       }

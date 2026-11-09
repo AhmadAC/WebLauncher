@@ -29,12 +29,12 @@ jobs:
             npm init -y
           fi
 
-          # Install stable Capacitor 6 matching the setup from AuthIphone
-          npm install @capacitor/core@^6.0.0 @capacitor/cli@^6.0.0 @capacitor/ios@^6.0.0
+          # Install Capacitor 6 and the native Bluetooth Low Energy plugin
+          npm install @capacitor/core@^6.0.0 @capacitor/cli@^6.0.0 @capacitor/ios@^6.0.0 @capacitor-community/bluetooth-le@^6.0.0
 
-          # Create www directory and copy index.html into it
+          # Create www directory and copy web files
           mkdir -p www
-          cp index.html www/
+          cp Index.html www/index.html
           cp -r *.css *.js assets www/ 2>/dev/null || true
 
       # Step 4: Configure Capacitor & Fix Deployment Target
@@ -46,8 +46,14 @@ jobs:
           # Initialize capacitor
           npx cap init "WebLauncher" "com.ahmadac.weblauncher" --web-dir "www"
 
-          # Add iOS platform files (ignore initial pod install check if it throws)
+          # Add iOS platform files
           npx cap add ios || true
+
+          # Inject iOS Bluetooth Privacy Entitlements into Info.plist
+          if [ -f ios/App/App/Info.plist ]; then
+            /usr/libexec/PlistBuddy -c "Add :NSBluetoothAlwaysUsageDescription string 'WebLauncher connects to and exchanges data with ESP32 and BLE peripherals.'" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSBluetoothAlwaysUsageDescription 'WebLauncher connects to and exchanges data with ESP32 and BLE peripherals.'" ios/App/App/Info.plist
+            /usr/libexec/PlistBuddy -c "Add :NSBluetoothPeripheralUsageDescription string 'WebLauncher communicates with nearby ESP32 devices.'" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSBluetoothPeripheralUsageDescription 'WebLauncher communicates with nearby ESP32 devices.'" ios/App/App/Info.plist
+          fi
 
           # Force deployment target to iOS 15.0 in both Podfile and Xcode Project
           if [ -f ios/App/Podfile ]; then
@@ -57,13 +63,13 @@ jobs:
             sed -i '' -E "s/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g" ios/App/App.xcodeproj/project.pbxproj
           fi
 
+          # Sync capacitor plugins and native code
+          npx cap sync ios
+
           # Run pod install with updated target
           cd ios/App
           pod install
           cd ../..
-
-          # Sync web code
-          npx cap copy ios
 
       # Step 5: Build Xcode Workspace (Unsigned for Sideloading)
       - name: Build Xcode Workspace
