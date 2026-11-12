@@ -9,7 +9,7 @@
   <script src="capacitor.js"></script>
 
   <style>
-    /* 100% OFFLINE EMBEDDED STYLES */
+    /* 100% OFFLINE EMBEDDED STYLES (Zero external CDN fetches) */
     *, ::before, ::after { box-sizing: border-box; border-width: 0; border-style: solid; border-color: #334155; margin: 0; padding: 0; }
     html, body { height: 100%; width: 100%; }
     body {
@@ -43,6 +43,7 @@
       border: 1px solid rgba(255, 255, 255, 0.25);
     }
 
+    /* 60% default opacity for floating menu pill */
     #menu-pill {
       opacity: 0.6;
       transition: opacity 0.2s ease, transform 0.15s ease;
@@ -182,7 +183,7 @@
     <span>Tap an app to launch full-screen</span>
   </footer>
 
-  <!-- HIDDEN FILE INPUTS FOR VARIOUS IMPORT SOURCES -->
+  <!-- FILE PICKERS -->
   <input type="file" id="folder-picker" webkitdirectory directory multiple style="display:none;" onchange="handleFolderSelected(event)">
   <input type="file" id="multifile-picker" multiple accept=".html,.htm,.js,.mjs,.css,.json,.png,.jpg,.jpeg,.svg,.gif,.wav,.mp3,.zip" style="display:none;" onchange="handleMultiFilesSelected(event)">
   <input type="file" id="zip-picker" accept=".zip,application/zip,application/x-zip-compressed" style="display:none;" onchange="handleZipSelected(event)">
@@ -267,6 +268,18 @@
     </div>
   </div>
 
+  <!-- RENAME APP MODAL -->
+  <div id="rename-modal" style="position:fixed; inset:0; z-index:60; display:none; background:rgba(0,0,0,0.75); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); align-items:center; justify-content:center; padding:16px;">
+    <div class="glass-panel" style="width:100%; max-width:320px; border-radius:24px; padding:20px; display:flex; flex-direction:column; gap:16px;">
+      <h3 style="font-size:1rem; font-weight:700; color:white;">Rename App</h3>
+      <input type="text" id="rename-input" style="width:100%; padding:10px 14px; border-radius:12px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white; font-size:0.875rem; outline:none;" placeholder="App name">
+      <div style="display:flex; gap:8px;">
+        <button type="button" onclick="closeModal('rename-modal')" style="flex:1; padding:10px; border-radius:12px; background:rgba(255,255,255,0.1); font-size:0.75rem; font-weight:600; color:white; cursor:pointer;">Cancel</button>
+        <button type="button" onclick="saveRename()" style="flex:1; padding:10px; border-radius:12px; background:#0A84FF; font-size:0.75rem; font-weight:600; color:white; cursor:pointer;">Save</button>
+      </div>
+    </div>
+  </div>
+
   <!-- BACKUP & DIAGNOSTICS MODAL -->
   <div id="backup-modal" style="position:fixed; inset:0; z-index:50; display:none; background:rgba(0,0,0,0.75); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); align-items:center; justify-content:center; padding:16px;">
     <div class="glass-panel" style="width:100%; max-width:360px; border-radius:24px; padding:24px; display:flex; flex-direction:column; gap:16px;">
@@ -337,10 +350,10 @@
     <!-- Top Dynamic Island Buffer -->
     <div id="runtime-safe-top" style="width:100%; height:max(env(safe-area-inset-top, 54px), 64px); background:#000000; flex-shrink:0;"></div>
 
-    <!-- Floating Draggable Menu -->
+    <!-- Floating Menu: Positioned safely below the status bar & freely draggable -->
     <div id="floating-menu-container" style="position:fixed; z-index:10000; top:calc(max(env(safe-area-inset-top, 54px), 64px) + 12px); left:16px; user-select:none; -webkit-user-select:none; touch-action:none;">
       
-      <!-- Collapsed Pill -->
+      <!-- Collapsed Pill (60% Opacity) -->
       <div id="menu-pill" class="floating-glass" style="display:flex; align-items:center; gap:8px; padding:7px 13px; border-radius:9999px; box-shadow:0 8px 24px rgba(0,0,0,0.6); cursor:grab;">
         <svg style="width:14px; height:14px; color:rgba(255,255,255,0.85);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>
@@ -382,6 +395,7 @@
           </svg>
         </button>
       </div>
+
     </div>
 
     <!-- Protected IFrame Viewport -->
@@ -483,6 +497,7 @@
     let apps = [];
     let isEditMode = false;
     let currentRunningApp = null;
+    let appBeingRenamedId = null;
     let activeBlobUrls = [];
 
     function getCapacitorBle() {
@@ -583,7 +598,7 @@
             <button type="button" class="squircle ${app.gradient} app-press" style="width:68px; height:68px; display:flex; align-items:center; justify-content:center; color:white; border:none; box-shadow:0 8px 24px -4px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.25); cursor:pointer; pointer-events:none;">
               <span style="font-size:1.6rem; font-weight:700; letter-spacing:-0.03em;">${escapeHtml(app.name.charAt(0).toUpperCase())}</span>
             </button>
-            ${isMultiFile ? `
+            ${isMultiFile && !isEditMode ? `
               <div style="position:absolute; bottom:-3px; right:-3px; background:rgba(15,23,42,0.95); border:1px solid rgba(255,255,255,0.25); border-radius:9999px; padding:1px 5px; font-size:9px; font-weight:700; color:#38bdf8;">
                 ${fileCount}f
               </div>
@@ -645,6 +660,10 @@
       } else {
         showToast("Error: App not found.");
       }
+    }
+
+    function triggerFilePicker() {
+      openModal('import-modal');
     }
 
     function triggerPicker(id) {
@@ -722,7 +741,7 @@
       });
     }
 
-    // 1. Handle Entire Folder Upload
+    // 1. Folder Selection
     async function handleFolderSelected(event) {
       const filesList = Array.from(event.target.files);
       if (!filesList || filesList.length === 0) return;
@@ -747,7 +766,7 @@
       await finalizeMultiFileApp(appFiles, appName);
     }
 
-    // 2. Handle Multi-File Selection
+    // 2. Multi-File Selection
     async function handleMultiFilesSelected(event) {
       const filesList = Array.from(event.target.files);
       if (!filesList || filesList.length === 0) return;
@@ -768,7 +787,7 @@
       await finalizeMultiFileApp(appFiles, appName);
     }
 
-    // 3. Handle ZIP Archive
+    // 3. ZIP Archive Selection
     async function handleZipSelected(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -790,7 +809,7 @@
       }
     }
 
-    // Pure Offline ZIP Parser using native browser DecompressionStream('deflate-raw')
+    // Pure Offline ZIP Parser using browser native DecompressionStream('deflate-raw')
     async function parseZipBuffer(arrayBuffer) {
       const view = new DataView(arrayBuffer);
       const files = {};
@@ -881,7 +900,7 @@
       return files;
     }
 
-    // 4. Handle Single HTML
+    // 4. Single HTML Selection
     async function handleSingleFileSelected(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -934,6 +953,116 @@
       renderLauncher();
       recordLog('APP_SAVED', `Installed: "${finalName}" (${fileKeys.length} files, entry: ${entryName})`);
       showToast(`Installed "${finalName}" (${fileKeys.length} files)!`);
+    }
+
+    // =========================================================================
+    // INDIVIDUAL APP ACTIONS (RENAME & EXPORT HTML)
+    // =========================================================================
+    function promptRenameApp(event, id) {
+      event.stopPropagation();
+      const targetApp = apps.find(a => String(a.id) === String(id));
+      if (!targetApp) return;
+
+      appBeingRenamedId = targetApp.id;
+      const input = document.getElementById('rename-input');
+      input.value = targetApp.name;
+      openModal('rename-modal');
+      setTimeout(() => input.focus(), 150);
+    }
+
+    async function saveRename() {
+      const input = document.getElementById('rename-input');
+      const newName = input.value.trim();
+
+      if (!newName) {
+        showToast("Name cannot be empty.");
+        return;
+      }
+
+      const targetApp = apps.find(a => String(a.id) === String(appBeingRenamedId));
+      if (targetApp) {
+        targetApp.name = newName;
+        await saveAppToDB(targetApp);
+        await loadApps();
+        renderLauncher();
+        showToast("App renamed!");
+      }
+      closeModal('rename-modal');
+    }
+
+    // Assembles self-contained runnable HTML for exporting
+    function getExportableCode(targetApp) {
+      if (!targetApp.files || Object.keys(targetApp.files).length <= 1) {
+        return targetApp.code || (targetApp.files && Object.values(targetApp.files)[0]?.content) || '';
+      }
+
+      const entryKey = targetApp.entry || 'index.html';
+      const entryFile = targetApp.files[entryKey] || Object.values(targetApp.files)[0];
+      let html = entryFile.content || '';
+
+      // Inline CSS
+      html = html.replace(/<link[^>]+rel=["']stylesheet["'][^>]+href=["']([^"']+)["'][^>]*>/gi, (match, href) => {
+        const cleanHref = href.replace(/^\.\//, '');
+        if (targetApp.files[cleanHref] && !targetApp.files[cleanHref].isBinary) {
+          return `<style data-source="${cleanHref}">\n${targetApp.files[cleanHref].content}\n</style>`;
+        }
+        return match;
+      });
+
+      // Inline non-module Scripts
+      html = html.replace(/<script([^>]+)src=["']([^"']+)["']([^>]*)><\/script>/gi, (match, pre, src, post) => {
+        const cleanSrc = src.replace(/^\.\//, '');
+        if (targetApp.files[cleanSrc] && !targetApp.files[cleanSrc].isBinary && !pre.includes('type="module"')) {
+          return `<script${pre}${post}>\n${targetApp.files[cleanSrc].content}\n<\/script>`;
+        }
+        return match;
+      });
+
+      return html;
+    }
+
+    async function exportSingleApp(event, id) {
+      event.stopPropagation();
+      const targetApp = apps.find(a => String(a.id) === String(id));
+      if (!targetApp) {
+        showToast("Could not find app to export.");
+        return;
+      }
+
+      const codeToExport = getExportableCode(targetApp);
+      const safeFilename = `${targetApp.name.toLowerCase().replace(/[^a-z0-9_-]/gi, '_') || 'app'}.html`;
+
+      if (navigator.share && navigator.canShare) {
+        try {
+          const file = new File([codeToExport], safeFilename, { type: 'text/html' });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: targetApp.name
+            });
+            showToast("Exported successfully!");
+            return;
+          }
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
+
+      // Browser Fallback: Blob Download
+      try {
+        const blob = new Blob([codeToExport], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = safeFilename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        showToast(`Saved "${safeFilename}"!`);
+      } catch (e) {
+        showToast("Failed to export HTML.");
+      }
     }
 
     // =========================================================================
