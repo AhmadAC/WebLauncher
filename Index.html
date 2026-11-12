@@ -9,7 +9,7 @@
   <script src="capacitor.js"></script>
 
   <style>
-    /* 100% OFFLINE EMBEDDED STYLES (Zero external CDN fetches) */
+    /* 100% OFFLINE EMBEDDED STYLES */
     *, ::before, ::after { box-sizing: border-box; border-width: 0; border-style: solid; border-color: #334155; margin: 0; padding: 0; }
     html, body { height: 100%; width: 100%; }
     body {
@@ -43,7 +43,6 @@
       border: 1px solid rgba(255, 255, 255, 0.25);
     }
 
-    /* 60% default opacity for floating menu pill */
     #menu-pill {
       opacity: 0.6;
       transition: opacity 0.2s ease, transform 0.15s ease;
@@ -74,6 +73,23 @@
     .from-cyan-500 { background-image: linear-gradient(135deg, #06b6d4, #2563eb); }
     .from-fuchsia-600 { background-image: linear-gradient(135deg, #c026d3, #db2777); }
     .from-red-600 { background-image: linear-gradient(135deg, #dc2626, #be123c); }
+
+    .import-card-btn {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: white;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.15s ease;
+    }
+    .import-card-btn:hover { background: rgba(255, 255, 255, 0.14); }
+    .import-card-btn:active { transform: scale(0.98); }
   </style>
 </head>
 
@@ -117,7 +133,7 @@
         Edit
       </button>
 
-      <button type="button" onclick="triggerFilePicker()" style="width:36px; height:36px; border-radius:9999px; background:#0A84FF; color:white; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 4px 12px rgba(10,132,255,0.4);" title="Import App">
+      <button type="button" onclick="openModal('import-modal')" style="width:36px; height:36px; border-radius:9999px; background:#0A84FF; color:white; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 4px 12px rgba(10,132,255,0.4);" title="Import App">
         <svg style="width:18px; height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <line x1="12" y1="5" x2="12" y2="19"></line>
           <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -138,15 +154,15 @@
       </div>
       <div>
         <h2 style="font-size:1.1rem; font-weight:700; color:rgba(255,255,255,0.9);">No Apps Installed</h2>
-        <p style="font-size:0.75rem; color:rgba(255,255,255,0.5); max-width:260px; margin-top:4px;">Import HTML apps or restore a saved backup.</p>
+        <p style="font-size:0.75rem; color:rgba(255,255,255,0.5); max-width:260px; margin-top:4px;">Import HTML projects, multi-file folders, or restore backups.</p>
       </div>
       <div style="display:flex; gap:10px;">
-        <button type="button" onclick="triggerFilePicker()" style="padding:10px 16px; border-radius:14px; background:#0A84FF; color:white; font-size:0.75rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
+        <button type="button" onclick="openModal('import-modal')" style="padding:10px 16px; border-radius:14px; background:#0A84FF; color:white; font-size:0.75rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
           <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          <span>Import HTML</span>
+          <span>Import App / Folder</span>
         </button>
         <button type="button" onclick="triggerBackupRestore()" style="padding:10px 16px; border-radius:14px; background:rgba(255,255,255,0.1); color:white; font-size:0.75rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
           <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -166,8 +182,90 @@
     <span>Tap an app to launch full-screen</span>
   </footer>
 
-  <input type="file" id="file-picker" accept=".html,.htm,text/html,text/plain,.json,application/json" style="display:none;" onchange="handleFileSelected(event)">
+  <!-- HIDDEN FILE INPUTS FOR VARIOUS IMPORT SOURCES -->
+  <input type="file" id="folder-picker" webkitdirectory directory multiple style="display:none;" onchange="handleFolderSelected(event)">
+  <input type="file" id="multifile-picker" multiple accept=".html,.htm,.js,.mjs,.css,.json,.png,.jpg,.jpeg,.svg,.gif,.wav,.mp3,.zip" style="display:none;" onchange="handleMultiFilesSelected(event)">
+  <input type="file" id="zip-picker" accept=".zip,application/zip,application/x-zip-compressed" style="display:none;" onchange="handleZipSelected(event)">
+  <input type="file" id="single-picker" accept=".html,.htm,text/html,text/plain" style="display:none;" onchange="handleSingleFileSelected(event)">
   <input type="file" id="backup-picker" accept=".json,application/json,text/plain" style="display:none;" onchange="handleBackupSelected(event)">
+
+  <!-- IMPORT MODAL -->
+  <div id="import-modal" style="position:fixed; inset:0; z-index:50; display:none; background:rgba(0,0,0,0.75); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); align-items:center; justify-content:center; padding:16px;">
+    <div class="glass-panel" style="width:100%; max-width:360px; border-radius:24px; padding:24px; display:flex; flex-direction:column; gap:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <svg style="width:20px; height:20px; color:#0A84FF;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <h2 style="font-size:1rem; font-weight:700; color:white;">Import App or Modules</h2>
+        </div>
+        <button type="button" onclick="closeModal('import-modal')" style="background:rgba(255,255,255,0.1); border-radius:9999px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.7); cursor:pointer;">
+          <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <!-- Option 1: Folder Upload -->
+        <button type="button" class="import-card-btn" onclick="triggerPicker('folder-picker')">
+          <div style="width:36px; height:36px; border-radius:10px; background:rgba(56,189,248,0.2); display:flex; align-items:center; justify-content:center; color:#38bdf8; flex-shrink:0;">
+            <svg style="width:18px; height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <div>
+            <div style="font-size:0.85rem; font-weight:700;">Import Entire Folder</div>
+            <div style="font-size:0.7rem; color:rgba(255,255,255,0.5);">Picks a folder with index.html, JS, and CSS</div>
+          </div>
+        </button>
+
+        <!-- Option 2: ZIP File Upload -->
+        <button type="button" class="import-card-btn" onclick="triggerPicker('zip-picker')">
+          <div style="width:36px; height:36px; border-radius:10px; background:rgba(245,158,11,0.2); display:flex; align-items:center; justify-content:center; color:#f59e0b; flex-shrink:0;">
+            <svg style="width:18px; height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="21 8 21 21 3 21 3 8"></polyline>
+              <rect x="1" y="3" width="22" height="5"></rect>
+              <line x1="10" y1="12" x2="14" y2="12"></line>
+            </svg>
+          </div>
+          <div>
+            <div style="font-size:0.85rem; font-weight:700;">Import ZIP Archive</div>
+            <div style="font-size:0.7rem; color:rgba(255,255,255,0.5);">Great for iOS Files app (.zip bundle)</div>
+          </div>
+        </button>
+
+        <!-- Option 3: Multiple Files Selection -->
+        <button type="button" class="import-card-btn" onclick="triggerPicker('multifile-picker')">
+          <div style="width:36px; height:36px; border-radius:10px; background:rgba(168,85,247,0.2); display:flex; align-items:center; justify-content:center; color:#c084fc; flex-shrink:0;">
+            <svg style="width:18px; height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+          </div>
+          <div>
+            <div style="font-size:0.85rem; font-weight:700;">Select Multiple Files</div>
+            <div style="font-size:0.7rem; color:rgba(255,255,255,0.5);">Select all module files together at once</div>
+          </div>
+        </button>
+
+        <!-- Option 4: Single HTML File -->
+        <button type="button" class="import-card-btn" onclick="triggerPicker('single-picker')">
+          <div style="width:36px; height:36px; border-radius:10px; background:rgba(16,185,129,0.2); display:flex; align-items:center; justify-content:center; color:#34d399; flex-shrink:0;">
+            <svg style="width:18px; height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="16 18 22 12 16 6"></polyline>
+              <polyline points="8 6 2 12 8 18"></polyline>
+            </svg>
+          </div>
+          <div>
+            <div style="font-size:0.85rem; font-weight:700;">Single HTML File</div>
+            <div style="font-size:0.7rem; color:rgba(255,255,255,0.5);">Standard standalone HTML file</div>
+          </div>
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- BACKUP & DIAGNOSTICS MODAL -->
   <div id="backup-modal" style="position:fixed; inset:0; z-index:50; display:none; background:rgba(0,0,0,0.75); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); align-items:center; justify-content:center; padding:16px;">
@@ -239,10 +337,10 @@
     <!-- Top Dynamic Island Buffer -->
     <div id="runtime-safe-top" style="width:100%; height:max(env(safe-area-inset-top, 54px), 64px); background:#000000; flex-shrink:0;"></div>
 
-    <!-- Floating Menu: Positioned safely below the status bar & freely draggable -->
+    <!-- Floating Draggable Menu -->
     <div id="floating-menu-container" style="position:fixed; z-index:10000; top:calc(max(env(safe-area-inset-top, 54px), 64px) + 12px); left:16px; user-select:none; -webkit-user-select:none; touch-action:none;">
       
-      <!-- Collapsed Pill (60% Opacity) -->
+      <!-- Collapsed Pill -->
       <div id="menu-pill" class="floating-glass" style="display:flex; align-items:center; gap:8px; padding:7px 13px; border-radius:9999px; box-shadow:0 8px 24px rgba(0,0,0,0.6); cursor:grab;">
         <svg style="width:14px; height:14px; color:rgba(255,255,255,0.85);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>
@@ -284,7 +382,6 @@
           </svg>
         </button>
       </div>
-
     </div>
 
     <!-- Protected IFrame Viewport -->
@@ -386,6 +483,7 @@
     let apps = [];
     let isEditMode = false;
     let currentRunningApp = null;
+    let activeBlobUrls = [];
 
     function getCapacitorBle() {
       return window.Capacitor?.Plugins?.BluetoothLe || null;
@@ -477,11 +575,19 @@
           handleTileClick(app.id);
         };
 
+        const fileCount = app.files ? Object.keys(app.files).length : 1;
+        const isMultiFile = fileCount > 1;
+
         tile.innerHTML = `
           <div class="relative ${isEditMode ? 'jiggle' : ''}" style="position:relative;">
             <button type="button" class="squircle ${app.gradient} app-press" style="width:68px; height:68px; display:flex; align-items:center; justify-content:center; color:white; border:none; box-shadow:0 8px 24px -4px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.25); cursor:pointer; pointer-events:none;">
               <span style="font-size:1.6rem; font-weight:700; letter-spacing:-0.03em;">${escapeHtml(app.name.charAt(0).toUpperCase())}</span>
             </button>
+            ${isMultiFile ? `
+              <div style="position:absolute; bottom:-3px; right:-3px; background:rgba(15,23,42,0.95); border:1px solid rgba(255,255,255,0.25); border-radius:9999px; padding:1px 5px; font-size:9px; font-weight:700; color:#38bdf8;">
+                ${fileCount}f
+              </div>
+            ` : ''}
             ${isEditMode ? `
               <button type="button" onclick="removeApp(event, '${appIdStr}')" class="delete-btn" style="position:absolute; top:-6px; right:-6px; width:24px; height:24px; border-radius:9999px; background:#FF453A; color:white; display:flex; align-items:center; justify-content:center; border:2px solid #090a10; z-index:30; cursor:pointer;">
                 <svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -499,7 +605,7 @@
       if (!isEditMode) {
         const addTile = document.createElement('div');
         addTile.style.cssText = "display:flex; flex-direction:column; align-items:center; cursor:pointer;";
-        addTile.onclick = triggerFilePicker;
+        addTile.onclick = () => openModal('import-modal');
         addTile.innerHTML = `
           <button type="button" class="squircle app-press" style="width:68px; height:68px; background:rgba(255,255,255,0.05); border:2px dashed rgba(255,255,255,0.2); display:flex; flex-direction:column; align-items:center; justify-content:center; color:rgba(255,255,255,0.4); cursor:pointer; pointer-events:none;">
             <svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -523,48 +629,298 @@
       }
     }
 
-    function triggerFilePicker() {
-      const input = document.getElementById('file-picker');
+    function triggerPicker(id) {
+      closeModal('import-modal');
+      const input = document.getElementById(id);
       input.value = '';
       input.click();
     }
 
-    function handleFileSelected(event) {
+    // =========================================================================
+    // MULTI-FILE, FOLDER & ZIP INGESTION ENGINE
+    // =========================================================================
+    function getMimeType(filename) {
+      const ext = filename.split('.').pop().toLowerCase();
+      const types = {
+        'html': 'text/html',
+        'htm': 'text/html',
+        'css': 'text/css',
+        'js': 'application/javascript',
+        'mjs': 'application/javascript',
+        'json': 'application/json',
+        'svg': 'image/svg+xml',
+        'png': 'image/png',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'gif': 'image/gif',
+        'webp': 'image/webp',
+        'wav': 'audio/wav',
+        'mp3': 'audio/mpeg',
+        'ogg': 'audio/ogg',
+        'txt': 'text/plain'
+      };
+      return types[ext] || 'application/octet-stream';
+    }
+
+    function isTextFile(mime) {
+      return mime.startsWith('text/') || mime === 'application/javascript' || mime === 'application/json' || mime === 'image/svg+xml';
+    }
+
+    function normalizeFileTree(files) {
+      const keys = Object.keys(files);
+      if (keys.length === 0) return files;
+
+      const parts = keys.map(k => k.split('/'));
+      if (parts.every(p => p.length > 1 && p[0] === parts[0][0])) {
+        const rootDir = parts[0][0] + '/';
+        const normalized = {};
+        for (const k of keys) {
+          normalized[k.slice(rootDir.length)] = files[k];
+        }
+        return normalized;
+      }
+      return files;
+    }
+
+    async function readFileContent(file) {
+      return new Promise((resolve) => {
+        const mime = getMimeType(file.name);
+        const reader = new FileReader();
+
+        if (isTextFile(mime)) {
+          reader.onload = (e) => resolve({ content: e.target.result, isBinary: false, type: mime });
+          reader.readAsText(file);
+        } else {
+          reader.onload = (e) => {
+            const bytes = new Uint8Array(e.target.result);
+            let binaryStr = '';
+            for (let i = 0; i < bytes.byteLength; i++) {
+              binaryStr += String.fromCharCode(bytes[i]);
+            }
+            resolve({ content: btoa(binaryStr), isBinary: true, type: mime });
+          };
+          reader.readAsArrayBuffer(file);
+        }
+      });
+    }
+
+    // 1. Handle Entire Folder Upload
+    async function handleFolderSelected(event) {
+      const filesList = Array.from(event.target.files);
+      if (!filesList || filesList.length === 0) return;
+
+      const appFiles = {};
+      let appName = 'My App';
+
+      const firstRel = filesList[0].webkitRelativePath || '';
+      if (firstRel.includes('/')) {
+        appName = firstRel.split('/')[0];
+      }
+
+      for (const file of filesList) {
+        if (file.name === '.DS_Store' || file.webkitRelativePath.includes('__MACOSX/')) continue;
+        let relPath = file.webkitRelativePath || file.name;
+        if (relPath.startsWith(appName + '/')) {
+          relPath = relPath.substring(appName.length + 1);
+        }
+        appFiles[relPath] = await readFileContent(file);
+      }
+
+      await finalizeMultiFileApp(appFiles, appName);
+    }
+
+    // 2. Handle Multi-File Selection
+    async function handleMultiFilesSelected(event) {
+      const filesList = Array.from(event.target.files);
+      if (!filesList || filesList.length === 0) return;
+
+      if (filesList.length === 1 && (filesList[0].name.endsWith('.zip') || filesList[0].type.includes('zip'))) {
+        await processZipFile(filesList[0]);
+        return;
+      }
+
+      const appFiles = {};
+      let appName = 'Robot App';
+
+      for (const file of filesList) {
+        if (file.name === '.DS_Store') continue;
+        appFiles[file.name] = await readFileContent(file);
+      }
+
+      await finalizeMultiFileApp(appFiles, appName);
+    }
+
+    // 3. Handle ZIP Archive
+    async function handleZipSelected(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      await processZipFile(file);
+    }
+
+    async function processZipFile(file) {
+      const zipName = file.name.replace(/\.[^/.]+$/, "");
+      showToast("Unpacking ZIP modules...");
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const extracted = await parseZipBuffer(arrayBuffer);
+        const normalized = normalizeFileTree(extracted);
+        await finalizeMultiFileApp(normalized, zipName);
+      } catch (err) {
+        recordLog('ZIP_ERR', `Extraction failed: ${err.message}`);
+        showToast("Error reading ZIP file.");
+      }
+    }
+
+    // Pure Offline ZIP Parser using native browser DecompressionStream('deflate-raw')
+    async function parseZipBuffer(arrayBuffer) {
+      const view = new DataView(arrayBuffer);
+      const files = {};
+
+      let eocdOffset = -1;
+      for (let i = arrayBuffer.byteLength - 22; i >= 0; i--) {
+        if (view.getUint32(i, true) === 0x06054b50) {
+          eocdOffset = i;
+          break;
+        }
+      }
+
+      if (eocdOffset === -1) {
+        throw new Error("End of Central Directory not found in ZIP.");
+      }
+
+      const totalEntries = view.getUint16(eocdOffset + 10, true);
+      const cdOffset = view.getUint32(eocdOffset + 16, true);
+
+      let cur = cdOffset;
+      for (let i = 0; i < totalEntries; i++) {
+        if (view.getUint32(cur, true) !== 0x02014b50) break;
+
+        const method = view.getUint16(cur + 10, true);
+        const compressedSize = view.getUint32(cur + 20, true);
+        const uncompressedSize = view.getUint32(cur + 24, true);
+        const fnLen = view.getUint16(cur + 28, true);
+        const extraLen = view.getUint16(cur + 30, true);
+        const commentLen = view.getUint16(cur + 32, true);
+        const localOffset = view.getUint32(cur + 42, true);
+
+        const filenameBytes = new Uint8Array(arrayBuffer, cur + 46, fnLen);
+        const filename = new TextDecoder().decode(filenameBytes);
+
+        cur += 46 + fnLen + extraLen + commentLen;
+
+        if (filename.endsWith('/') || filename.includes('__MACOSX/') || filename.endsWith('.DS_Store')) {
+          continue;
+        }
+
+        if (view.getUint32(localOffset, true) !== 0x04034b50) continue;
+        const localFnLen = view.getUint16(localOffset + 26, true);
+        const localExtraLen = view.getUint16(localOffset + 28, true);
+        const dataOffset = localOffset + 30 + localFnLen + localExtraLen;
+
+        let decompressedBytes = null;
+        if (method === 0) {
+          decompressedBytes = new Uint8Array(arrayBuffer, dataOffset, uncompressedSize);
+        } else if (method === 8) {
+          const compressed = new Uint8Array(arrayBuffer, dataOffset, compressedSize);
+          if (typeof DecompressionStream !== 'undefined') {
+            const ds = new DecompressionStream('deflate-raw');
+            const writer = ds.writable.getWriter();
+            writer.write(compressed);
+            writer.close();
+            const resp = new Response(ds.readable);
+            const buf = await resp.arrayBuffer();
+            decompressedBytes = new Uint8Array(buf);
+          } else {
+            throw new Error("DecompressionStream is unsupported on this device.");
+          }
+        } else {
+          continue;
+        }
+
+        const mime = getMimeType(filename);
+        const isText = isTextFile(mime);
+
+        if (isText) {
+          files[filename] = {
+            content: new TextDecoder().decode(decompressedBytes),
+            type: mime,
+            isBinary: false
+          };
+        } else {
+          let binaryStr = '';
+          for (let b = 0; b < decompressedBytes.byteLength; b++) {
+            binaryStr += String.fromCharCode(decompressedBytes[b]);
+          }
+          files[filename] = {
+            content: btoa(binaryStr),
+            type: mime,
+            isBinary: true
+          };
+        }
+      }
+
+      return files;
+    }
+
+    // 4. Handle Single HTML
+    async function handleSingleFileSelected(event) {
       const file = event.target.files[0];
       if (!file) return;
 
-      const reader = new FileReader();
-      reader.onload = async function(e) {
-        const fileContent = e.target.result;
+      const content = await readFileContent(file);
+      let appName = file.name.replace(/\.[^/.]+$/, "");
+      const titleMatch = content.content.match(/<title[^>]*>([^<]+)<\/title>/i);
+      if (titleMatch && titleMatch[1].trim()) {
+        appName = titleMatch[1].trim();
+      }
 
-        if (file.name.endsWith('.json') || file.type === 'application/json') {
-          processBackupContent(fileContent);
-          return;
-        }
-
-        let appName = file.name.replace(/\.[^/.]+$/, "");
-        const titleMatch = fileContent.match(/<title[^>]*>([^<]+)<\/title>/i);
-        if (titleMatch && titleMatch[1].trim()) {
-          appName = titleMatch[1].trim();
-        }
-
-        const newApp = {
-          id: Date.now(),
-          name: appName,
-          gradient: GRADIENTS[Math.floor(Math.random() * GRADIENTS.length)],
-          code: fileContent,
-          timestamp: Date.now()
-        };
-
-        await saveAppToDB(newApp);
-        await loadApps();
-        renderLauncher();
-        showToast(`"${appName}" imported!`);
-      };
-
-      reader.readAsText(file);
+      const files = {};
+      files["index.html"] = content;
+      await finalizeMultiFileApp(files, appName);
     }
 
+    // Common Finalizer for Multi-File Bundling
+    async function finalizeMultiFileApp(appFiles, fallbackName) {
+      const fileKeys = Object.keys(appFiles);
+      if (fileKeys.length === 0) {
+        showToast("No usable files found.");
+        return;
+      }
+
+      let entryName = fileKeys.find(k => k.toLowerCase() === 'index.html' || k.toLowerCase() === 'index.htm');
+      if (!entryName) {
+        entryName = fileKeys.find(k => k.endsWith('.html') || k.endsWith('.htm')) || fileKeys[0];
+      }
+
+      let finalName = fallbackName;
+      if (appFiles[entryName] && !appFiles[entryName].isBinary) {
+        const titleMatch = appFiles[entryName].content.match(/<title[^>]*>([^<]+)<\/title>/i);
+        if (titleMatch && titleMatch[1].trim()) {
+          finalName = titleMatch[1].trim();
+        }
+      }
+
+      const newApp = {
+        id: Date.now(),
+        name: finalName,
+        gradient: GRADIENTS[Math.floor(Math.random() * GRADIENTS.length)],
+        entry: entryName,
+        files: appFiles,
+        code: appFiles[entryName] ? appFiles[entryName].content : '',
+        timestamp: Date.now()
+      };
+
+      await saveAppToDB(newApp);
+      await loadApps();
+      renderLauncher();
+      recordLog('APP_SAVED', `Installed: "${finalName}" (${fileKeys.length} files, entry: ${entryName})`);
+      showToast(`Installed "${finalName}" (${fileKeys.length} files)!`);
+    }
+
+    // =========================================================================
+    // EXPORT / BACKUP & RESTORE
+    // =========================================================================
     async function exportAllApps() {
       if (!apps || apps.length === 0) {
         showToast("No apps to export!");
@@ -575,7 +931,7 @@
       const filename = `weblauncher-backup-${dateIso}.json`;
       
       const backupData = {
-        version: 1,
+        version: 2,
         source: "WebLauncher",
         exportedAt: new Date().toISOString(),
         totalApps: apps.length,
@@ -616,44 +972,42 @@
       if (!file) return;
 
       const reader = new FileReader();
-      reader.onload = function(e) {
-        processBackupContent(e.target.result);
+      reader.onload = async function(e) {
+        try {
+          const parsed = JSON.parse(e.target.result);
+          const importedApps = Array.isArray(parsed) ? parsed : (parsed.apps || []);
+
+          if (!Array.isArray(importedApps) || importedApps.length === 0) {
+            showToast("No valid apps found in backup file.");
+            return;
+          }
+
+          let restoredCount = 0;
+          for (const item of importedApps) {
+            if (item && item.name && (item.files || item.code)) {
+              const appObj = {
+                id: item.id || Date.now() + Math.floor(Math.random() * 1000),
+                name: item.name,
+                gradient: item.gradient || GRADIENTS[Math.floor(Math.random() * GRADIENTS.length)],
+                entry: item.entry || 'index.html',
+                files: item.files || { 'index.html': { content: item.code, isBinary: false, type: 'text/html' } },
+                code: item.code || (item.files && item.files[item.entry || 'index.html']?.content) || '',
+                timestamp: item.timestamp || Date.now()
+              };
+              await saveAppToDB(appObj);
+              restoredCount++;
+            }
+          }
+
+          await loadApps();
+          renderLauncher();
+          closeModal('backup-modal');
+          showToast(`Restored ${restoredCount} apps!`);
+        } catch (err) {
+          showToast("Invalid backup JSON file.");
+        }
       };
       reader.readAsText(file);
-    }
-
-    async function processBackupContent(rawContent) {
-      try {
-        const parsed = JSON.parse(rawContent);
-        const importedApps = Array.isArray(parsed) ? parsed : (parsed.apps || []);
-
-        if (!Array.isArray(importedApps) || importedApps.length === 0) {
-          showToast("No valid apps found in backup file.");
-          return;
-        }
-
-        let restoredCount = 0;
-        for (const item of importedApps) {
-          if (item && item.name && item.code) {
-            const appObj = {
-              id: item.id || Date.now() + Math.floor(Math.random() * 1000),
-              name: item.name,
-              gradient: item.gradient || GRADIENTS[Math.floor(Math.random() * GRADIENTS.length)],
-              code: item.code,
-              timestamp: item.timestamp || Date.now()
-            };
-            await saveAppToDB(appObj);
-            restoredCount++;
-          }
-        }
-
-        await loadApps();
-        renderLauncher();
-        closeModal('backup-modal');
-        showToast(`Restored ${restoredCount} apps!`);
-      } catch (err) {
-        showToast("Invalid backup JSON file.");
-      }
     }
 
     async function confirmWipeAll() {
@@ -682,12 +1036,19 @@
       renderLauncher();
     }
 
-    // ========================================================
-    // APP RUNTIME ENGINE (Clean IFrame Loading)
-    // ========================================================
+    // =========================================================================
+    // VIRTUAL BUNDLER & RUNTIME ENGINE
+    // =========================================================================
+    function cleanupActiveBlobs() {
+      if (activeBlobUrls && activeBlobUrls.length > 0) {
+        activeBlobUrls.forEach(url => URL.revokeObjectURL(url));
+        activeBlobUrls = [];
+      }
+    }
+
     function launchApp(app) {
-      if (!app || !app.code) {
-        showToast("App code is empty.");
+      if (!app || (!app.code && !app.files)) {
+        showToast("App files are empty.");
         return;
       }
       currentRunningApp = app;
@@ -697,14 +1058,27 @@
       collapseFloatingMenu();
 
       modal.style.display = 'flex';
-      loadAppIntoIframe(app.code);
+      assembleAndLoadApp(app);
     }
 
-    function loadAppIntoIframe(htmlCode) {
+    function assembleAndLoadApp(app) {
+      cleanupActiveBlobs();
       const iframe = document.getElementById('runtime-iframe');
       iframe.removeAttribute('src');
 
-      const shieldCss = `
+      // Native Capacitor & BLE Bridge Pass-Through
+      const bridgeScript = `
+        <script id="native-runtime-bridge">
+          if (!window.Capacitor && window.parent && window.parent.Capacitor) {
+            window.Capacitor = window.parent.Capacitor;
+          }
+          if (!window.BluetoothLe && window.parent && window.parent.BluetoothLe) {
+            window.BluetoothLe = window.parent.BluetoothLe;
+          }
+        <\/script>
+      `;
+
+      const islandShield = `
         <style id="ios-island-shield">
           html, body {
             margin: 0 !important;
@@ -713,14 +1087,86 @@
         </style>
       `;
 
-      let preparedHtml = htmlCode;
-      if (preparedHtml.includes('<head>')) {
-        preparedHtml = preparedHtml.replace('<head>', '<head>' + shieldCss);
-      } else {
-        preparedHtml = shieldCss + preparedHtml;
+      // Legacy Single-File Mode
+      if (!app.files || Object.keys(app.files).length <= 1) {
+        let code = app.code || (app.files && Object.values(app.files)[0]?.content) || '';
+        if (code.includes('<head>')) {
+          code = code.replace('<head>', '<head>\n' + bridgeScript + '\n' + islandShield);
+        } else {
+          code = bridgeScript + islandShield + code;
+        }
+        iframe.srcdoc = code;
+        return;
       }
 
-      iframe.srcdoc = preparedHtml;
+      // Multi-File Virtual Module Resolution
+      const blobMap = {};
+      const importMap = { imports: {} };
+
+      for (const [relPath, fileObj] of Object.entries(app.files)) {
+        let blob;
+        if (fileObj.isBinary) {
+          const binStr = atob(fileObj.content);
+          const bytes = new Uint8Array(binStr.length);
+          for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+          blob = new Blob([bytes], { type: fileObj.type });
+        } else {
+          blob = new Blob([fileObj.content], { type: fileObj.type });
+        }
+
+        const bUrl = URL.createObjectURL(blob);
+        activeBlobUrls.push(bUrl);
+        blobMap[relPath] = bUrl;
+        blobMap['./' + relPath] = bUrl;
+        blobMap['/' + relPath] = bUrl;
+
+        if (relPath.endsWith('.js') || relPath.endsWith('.mjs')) {
+          importMap.imports[relPath] = bUrl;
+          importMap.imports['./' + relPath] = bUrl;
+        }
+      }
+
+      const importMapTag = `<script type="importmap">${JSON.stringify(importMap)}<\/script>`;
+      const entryKey = app.entry || 'index.html';
+      const entryFile = app.files[entryKey] || Object.values(app.files)[0];
+      let html = entryFile.content || '';
+
+      // Inline or map CSS <link rel="stylesheet">
+      html = html.replace(/<link[^>]+rel=["']stylesheet["'][^>]+href=["']([^"']+)["'][^>]*>/gi, (match, href) => {
+        const cleanHref = href.replace(/^\.\//, '');
+        if (app.files[cleanHref] && !app.files[cleanHref].isBinary) {
+          return `<style data-href="${cleanHref}">\n${app.files[cleanHref].content}\n</style>`;
+        } else if (blobMap[href]) {
+          return `<link rel="stylesheet" href="${blobMap[href]}">`;
+        }
+        return match;
+      });
+
+      // Rewrite Script Sources
+      html = html.replace(/<script([^>]+)src=["']([^"']+)["']([^>]*)><\/script>/gi, (match, pre, src, post) => {
+        if (blobMap[src]) {
+          return `<script${pre}src="${blobMap[src]}"${post}><\/script>`;
+        }
+        return match;
+      });
+
+      // Rewrite Images, Audio and Media
+      html = html.replace(/\b(src|href)=["']([^"']+)["']/gi, (match, attr, val) => {
+        if (blobMap[val]) {
+          return `${attr}="${blobMap[val]}"`;
+        }
+        return match;
+      });
+
+      // Inject Header Assets
+      const injections = `\n${importMapTag}\n${bridgeScript}\n${islandShield}\n`;
+      if (html.includes('<head>')) {
+        html = html.replace('<head>', '<head>' + injections);
+      } else {
+        html = injections + html;
+      }
+
+      iframe.srcdoc = html;
     }
 
     function exitApp() {
@@ -729,21 +1175,22 @@
       modal.style.display = 'none';
       iframe.srcdoc = '';
       iframe.src = 'about:blank';
+      cleanupActiveBlobs();
       currentRunningApp = null;
       recordLog('APP_EXIT', 'Closed app runtime.');
     }
 
     function reloadApp() {
-      if (currentRunningApp && currentRunningApp.code) {
-        loadAppIntoIframe(currentRunningApp.code);
+      if (currentRunningApp) {
+        assembleAndLoadApp(currentRunningApp);
         showToast("App reloaded");
         recordLog('APP_RELOAD', `Reloaded: ${currentRunningApp.name}`);
       }
     }
 
-    // ========================================================
+    // =========================================================================
     // FLOATING CONTROLLER LOGIC (DRAGGABLE & TOUCH-SAFE)
-    // ========================================================
+    // =========================================================================
     const floatingContainer = document.getElementById('floating-menu-container');
     const menuPill = document.getElementById('menu-pill');
     const menuExpanded = document.getElementById('menu-expanded');
@@ -769,12 +1216,7 @@
       initialTop = rect.top;
 
       floatingContainer.classList.add('is-dragging');
-
-      // Crucial: Prevent iframe from capturing pointer events while moving
-      if (runtimeIframe) {
-        runtimeIframe.style.pointerEvents = 'none';
-      }
-
+      if (runtimeIframe) runtimeIframe.style.pointerEvents = 'none';
       floatingContainer.setPointerCapture(e.pointerId);
     });
 
@@ -811,14 +1253,9 @@
       if (!isDragging) return;
       isDragging = false;
       floatingContainer.classList.remove('is-dragging');
+      if (runtimeIframe) runtimeIframe.style.pointerEvents = 'auto';
 
-      if (runtimeIframe) {
-        runtimeIframe.style.pointerEvents = 'auto';
-      }
-
-      try {
-        floatingContainer.releasePointerCapture(e.pointerId);
-      } catch (err) {}
+      try { floatingContainer.releasePointerCapture(e.pointerId); } catch (err) {}
 
       if (!hasMoved) {
         toggleFloatingMenu();
@@ -833,7 +1270,6 @@
         menuPill.style.display = 'none';
         menuExpanded.style.display = 'flex';
 
-        // Keep expanded menu inside viewport bounds
         requestAnimationFrame(() => {
           const rect = floatingContainer.getBoundingClientRect();
           if (rect.right > window.innerWidth - 10) {

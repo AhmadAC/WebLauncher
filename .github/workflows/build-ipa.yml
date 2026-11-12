@@ -32,15 +32,23 @@ jobs:
           # Install Capacitor 6 and Bluetooth LE plugin
           npm install @capacitor/core@^6.0.0 @capacitor/cli@^6.0.0 @capacitor/ios@^6.0.0 @capacitor-community/bluetooth-le@^6.0.0
 
-          # Create www directory and copy web files
+          # Create www directory and copy web files cleanly
           mkdir -p www
-          cp Index.html www/index.html
-          cp -r *.css *.js assets www/ 2>/dev/null || true
+          
+          # Support both Index.html and index.html naming
+          if [ -f Index.html ]; then
+            cp -f Index.html www/index.html
+          elif [ -f index.html ]; then
+            cp -f index.html www/index.html
+          fi
+
+          # Copy any companion modules, assets, and styles into web root
+          cp -r *.css *.js assets modules www/ 2>/dev/null || true
 
       # Step 4: Configure Capacitor & Fix Deployment Target
       - name: Configure Capacitor iOS Platform
         run: |
-          # Remove any previous conflicting files
+          # Remove any previous conflicting build artifacts
           rm -rf ios capacitor.config.json capacitor.config.ts
 
           # Initialize capacitor with full bridge access
@@ -49,7 +57,7 @@ jobs:
           # Add iOS platform files
           npx cap add ios || true
 
-          # Inject mandatory iOS 18 Bluetooth Background Modes & Privacy Entitlements
+          # Inject mandatory iOS Bluetooth Background Modes & Privacy Entitlements
           if [ -f ios/App/App/Info.plist ]; then
             /usr/libexec/PlistBuddy -c "Add :NSBluetoothAlwaysUsageDescription string 'WebLauncher connects to and controls ESP32 and BLE peripherals.'" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSBluetoothAlwaysUsageDescription 'WebLauncher connects to and controls ESP32 and BLE peripherals.'" ios/App/App/Info.plist
             /usr/libexec/PlistBuddy -c "Add :NSBluetoothPeripheralUsageDescription string 'WebLauncher communicates with nearby ESP32 devices.'" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSBluetoothPeripheralUsageDescription 'WebLauncher communicates with nearby ESP32 devices.'" ios/App/App/Info.plist
