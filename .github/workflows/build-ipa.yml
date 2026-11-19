@@ -67,6 +67,7 @@ jobs:
             # Allow plain HTTP / WS connections on local Wi-Fi inside WKWebView
             /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" ios/App/App/Info.plist || true
             /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsArbitraryLoads true" ios/App/App/Info.plist
+            /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoadsInWebContent bool true" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsArbitraryLoadsInWebContent true" ios/App/App/Info.plist
             /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsLocalNetworking true" ios/App/App/Info.plist
             
             # Add UIBackgroundModes for bluetooth-central so iOS does not kill the app when connected
@@ -121,4 +122,3 @@ jobs:
           name: WebLauncher-IPA
           path: build/IPA/WebLauncher.ipa
           retention-days: 14
-

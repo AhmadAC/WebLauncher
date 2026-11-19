@@ -45,6 +45,17 @@ export function assembleAndLoadApp(app) {
       if (!window.BluetoothLe && window.parent && window.parent.BluetoothLe) {
         window.BluetoothLe = window.parent.BluetoothLe;
       }
+      if (window.parent && window.parent.recordChildLog) {
+        window.recordChildLog = window.parent.recordChildLog;
+        const _origErr = console.error;
+        console.error = function(...args) {
+          try { window.parent.recordChildLog('APP_ERR', args.map(a => String(a)).join(' ')); } catch (e) {}
+          return _origErr.apply(console, args);
+        };
+        window.addEventListener('error', function(ev) {
+          try { window.parent.recordChildLog('APP_FATAL', (ev.message || '') + ' @ ' + (ev.lineno || 0)); } catch (e) {}
+        });
+      }
     <\/script>
   `;
 
