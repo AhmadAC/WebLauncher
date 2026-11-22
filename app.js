@@ -33,8 +33,57 @@ let targetAppForIcon = null;
 let searchQuery = '';
 let suppressClickUntil = 0;
 
-// Native BLE Bridge Initializer
+// Native BLE & TTS Bridge Initializers
 window.BluetoothLe = window.Capacitor?.Plugins?.BluetoothLe || null;
+
+function getNativeTTS() {
+  const tts = window.Capacitor?.Plugins?.TextToSpeech || null;
+  if (tts && !window.TextToSpeech) window.TextToSpeech = tts;
+  return tts;
+}
+window.TextToSpeech = getNativeTTS();
+
+// Listen for TTS requests from sandboxed / srcdoc / blob launched apps
+window.addEventListener('message', async (e) => {
+  const d = e.data;
+  if (!d || typeof d !== 'object') return;
+
+  const nativeTTS = getNativeTTS();
+
+  if (d.type === 'LAUNCHER_TTS_PING') {
+    try {
+      e.source?.postMessage({ type: 'LAUNCHER_TTS_PONG', hasNative: Boolean(nativeTTS) }, '*');
+    } catch (_) {}
+    return;
+  }
+
+  if (d.type === 'LAUNCHER_TTS') {
+    if (nativeTTS) {
+      try {
+        await nativeTTS.stop().catch(() => {});
+        await nativeTTS.speak({
+          text: String(d.text || ''),
+          lang: d.lang || 'ru-RU',
+          rate: typeof d.rate === 'number' ? d.rate : 1.0,
+          pitch: 1.0,
+          volume: 1.0,
+          category: 'playback', // Plays even when iPhone Silent Mode is ON
+          queueStrategy: 1
+        });
+      } catch (err) {
+        recordLog('TTS_ERR', `Native TTS failed: ${err?.message || err}`);
+      }
+    } else if ('speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(String(d.text || ''));
+        u.lang = d.lang || 'ru-RU';
+        u.rate = typeof d.rate === 'number' ? d.rate : 0.95;
+        window.speechSynthesis.speak(u);
+      } catch (_) {}
+    }
+  }
+});
 
 export function showToast(msg) {
   const toast = document.getElementById('toast');
@@ -947,6 +996,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   initSearch();
   initStyleModal();
   initDragListeners();
+  window.BluetoothLe = window.Capacitor?.Plugins?.BluetoothLe || window.BluetoothLe || null;
+  window.TextToSpeech = getNativeTTS();
   await initDatabase();
   await refreshApps();
 
@@ -992,7 +1043,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   };
 
   // Floating Menu Actions
-  document.getElementById('btn-runtime-exit').onclick = exitApp;
+  document.getElementById('btn-runtime-exit').onclick = () => {
+    const nativeTTS = getNativeTTS();
+    if (nativeTTS) nativeTTS.stop().catch(() => {});
+    exitApp();
+  };
   document.getElementById('btn-runtime-logs').onclick = downloadAppLogs;
   document.getElementById('btn-runtime-reload').onclick = () => reloadApp(showToast);
   document.getElementById('btn-runtime-collapse').onclick = collapseFloatingMenu;
