@@ -29,12 +29,12 @@ jobs:
             npm init -y
           fi
 
-          # Install Capacitor 6 and Bluetooth LE plugin
-          npm install @capacitor/core@^6.0.0 @capacitor/cli@^6.0.0 @capacitor/ios@^6.0.0 @capacitor-community/bluetooth-le@^6.0.0
+          # Install Capacitor 6, Bluetooth LE, and Text-to-Speech plugins
+          npm install @capacitor/core@^6.0.0 @capacitor/cli@^6.0.0 @capacitor/ios@^6.0.0 @capacitor-community/bluetooth-le@^6.0.0 @capacitor-community/text-to-speech@^5.1.0
 
           # Create www directory and copy web files cleanly
           mkdir -p www
-          
+
           # Support both Index.html and index.html naming
           if [ -f Index.html ]; then
             cp -f Index.html www/index.html
@@ -69,7 +69,7 @@ jobs:
             /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsArbitraryLoads true" ios/App/App/Info.plist
             /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoadsInWebContent bool true" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsArbitraryLoadsInWebContent true" ios/App/App/Info.plist
             /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsLocalNetworking true" ios/App/App/Info.plist
-            
+
             # Add UIBackgroundModes for bluetooth-central so iOS does not kill the app when connected
             /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" ios/App/App/Info.plist || true
             /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string bluetooth-central" ios/App/App/Info.plist || true
