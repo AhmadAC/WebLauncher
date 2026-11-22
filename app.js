@@ -2,20 +2,36 @@
 // MAIN CONTROLLER: COORDINATION, SVG ICON PICKER & UI BINDINGS
 // =========================================================================
 import { initLogger, recordLog, downloadAppLogs } from './modules/logger.js';
-import { initDatabase, loadAppsFromDB, saveAppToDB, deleteAppFromDB, clearAllAppsFromDB } from './modules/db.js';
+import { initDatabase, loadAppsFromDB, saveAppToDB, saveAppsToDB, deleteAppFromDB, clearAllAppsFromDB } from './modules/db.js';
 import { readFileContent, parseZipBuffer, normalizeFileTree } from './modules/zip.js';
 import { launchApp, exitApp, reloadApp, getExportableCode } from './modules/runtime.js';
 import { setupFloatingMenu, collapseFloatingMenu } from './modules/floatingMenu.js';
 
-const GRADIENTS = [
-  "from-blue-600", "from-purple-600", "from-pink-600", "from-amber-500",
-  "from-emerald-600", "from-cyan-500", "from-fuchsia-600", "from-red-600"
+// Gradient presets. The keys match the legacy CSS class names that older saved apps
+// store in `app.gradient`, so existing apps keep their colour.
+const GRADIENT_DEFS = {
+  "from-blue-600":    ["#2563eb", "#4338ca"],
+  "from-purple-600":  ["#9333ea", "#4f46e5"],
+  "from-pink-600":    ["#db2777", "#e11d48"],
+  "from-amber-500":   ["#f59e0b", "#ea580c"],
+  "from-emerald-600": ["#059669", "#0f766e"],
+  "from-cyan-500":    ["#06b6d4", "#2563eb"],
+  "from-fuchsia-600": ["#c026d3", "#db2777"],
+  "from-red-600":     ["#dc2626", "#be123c"]
+};
+const GRADIENTS = Object.keys(GRADIENT_DEFS);
+
+const SOLID_COLORS = [
+  "#ef4444", "#f97316", "#eab308", "#22c55e", "#14b8a6", "#3b82f6",
+  "#6366f1", "#a855f7", "#ec4899", "#64748b", "#ffffff", "#111827"
 ];
 
 let apps = [];
 let isEditMode = false;
 let appBeingRenamedId = null;
 let targetAppForIcon = null;
+let searchQuery = '';
+let suppressClickUntil = 0;
 
 // Native BLE Bridge Initializer
 window.BluetoothLe = window.Capacitor?.Plugins?.BluetoothLe || null;
@@ -33,6 +49,7 @@ export function openModal(id) {
 
 export function closeModal(id) {
   document.getElementById(id).style.display = 'none';
+  if (id === 'style-modal') onStyleModalClosed();
 }
 
 function escapeHtml(str) {
@@ -86,27 +103,183 @@ async function handleIconPicked(event) {
 }
 
 // =========================================================================
+// TILE STYLE HELPERS (colour / opacity / transparent / glass)
+// =========================================================================
+const TILE_MODES = ['gradient', 'color', 'transparent', 'glass'];
+
+function hexToRgb(hex) {
+  let h = String(hex || '').trim().replace(/^#/, '');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  if (!/^[0-9a-f]{6}$/i.test(h)) return null;
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+function normalizeHex(hex) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return null;
+  return '#' + rgb.map(n => n.toString(16).padStart(2, '0')).join('');
+}
+
+function rgbaStr(hex, alpha) {
+  const [r, g, b] = hexToRgb(hex) || [37, 99, 235];
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function isLightColor(hex) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return false;
+  return (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255 > 0.62;
+}
+
+// Always returns a complete, valid style. Apps that were installed before this
+// feature existed have no `tileStyle`, so they fall back to their old gradient.
+function resolveTileStyle(app) {
+  const s = app.tileStyle || {};
+  const mode = TILE_MODES.includes(s.mode) ? s.mode : 'gradient';
+  const gradient = GRADIENT_DEFS[s.gradient] ? s.gradient
+    : (GRADIENT_DEFS[app.gradient] ? app.gradient : GRADIENTS[0]);
+  const color = normalizeHex(s.color) || '#2563eb';
+  let opacity = s.opacity == null ? 100 : Number(s.opacity);
+  if (!Number.isFinite(opacity)) opacity = 100;
+  opacity = Math.min(100, Math.max(0, Math.round(opacity)));
+  return { mode, gradient, color, opacity };
+}
+
+// Inline CSS for the 68x68 tile face.
+function tileFaceStyle(app) {
+  const s = resolveTileStyle(app);
+  const a = s.opacity / 100;
+  const dropShadow = (k) => `0 8px 24px -4px rgba(0,0,0,${(0.6 * k).toFixed(2)})`;
+  const highlight = (k) => `inset 0 1px 1px rgba(255,255,255,${(0.25 * k).toFixed(2)})`;
+  let background, border = 'none', shadow, extra = '', text = '#ffffff', textShadow = 'none';
+
+  if (s.mode === 'transparent') {
+    background = 'transparent';
+    shadow = 'none';
+    textShadow = '0 1px 6px rgba(0,0,0,0.75)';
+  } else if (s.mode === 'glass') {
+    background = 'rgba(255,255,255,0.12)';
+    border = '1px solid rgba(255,255,255,0.28)';
+    shadow = `${dropShadow(0.7)}, ${highlight(1.2)}`;
+    extra = 'backdrop-filter:blur(14px) saturate(160%); -webkit-backdrop-filter:blur(14px) saturate(160%);';
+  } else if (s.mode === 'color') {
+    background = rgbaStr(s.color, a);
+    shadow = `${dropShadow(a)}, ${highlight(a)}`;
+    if (a > 0.5 && isLightColor(s.color)) text = '#0f172a';
+  } else {
+    const [c1, c2] = GRADIENT_DEFS[s.gradient];
+    background = `linear-gradient(135deg, ${rgbaStr(c1, a)}, ${rgbaStr(c2, a)})`;
+    shadow = `${dropShadow(a)}, ${highlight(a)}`;
+  }
+
+  return `width:68px; height:68px; display:flex; align-items:center; justify-content:center; ` +
+    `color:${text}; text-shadow:${textShadow}; background:${background}; border:${border}; ` +
+    `box-shadow:${shadow}; ${extra} cursor:pointer; pointer-events:none;`;
+}
+
+function iconMarkup(app) {
+  return app.icon
+    ? `<img src="${app.icon}" style="width:62%; height:62%; object-fit:contain; pointer-events:none;" alt="icon" />`
+    : `<span style="font-size:1.6rem; font-weight:700; letter-spacing:-0.03em;">${escapeHtml(String(app.name || '?').charAt(0).toUpperCase())}</span>`;
+}
+
+function findApp(id) {
+  return apps.find(a => String(a.id) === String(id));
+}
+
+function findTileEl(id) {
+  const grid = document.getElementById('app-grid');
+  return Array.from(grid.children).find(el => el.dataset && el.dataset.appId === String(id));
+}
+
+function refreshTileFace(app) {
+  const tile = findTileEl(app.id);
+  const face = tile && tile.querySelector('.tile-face');
+  if (face) face.style.cssText = tileFaceStyle(app);
+}
+
+// =========================================================================
+// SEARCH
+// =========================================================================
+// Every word typed must appear somewhere in the app name ("pad note" finds "Notepad").
+function getVisibleApps() {
+  const words = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return apps;
+  return apps.filter(app => {
+    const name = String(app.name || '').toLowerCase();
+    return words.every(w => name.includes(w));
+  });
+}
+
+function setSearch(value) {
+  searchQuery = value;
+  document.getElementById('search-clear').style.display = value ? 'flex' : 'none';
+  renderLauncher();
+}
+
+function initSearch() {
+  const input = document.getElementById('search-input');
+  const clear = document.getElementById('search-clear');
+
+  input.addEventListener('input', () => setSearch(input.value));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      // Spotlight-style: pressing Search/Enter launches the top match.
+      const first = getVisibleApps()[0];
+      input.blur();
+      if (first && searchQuery.trim() && !isEditMode) {
+        launchApp(first, showToast, collapseFloatingMenu);
+      }
+    } else if (e.key === 'Escape') {
+      input.value = '';
+      setSearch('');
+    }
+  });
+  clear.onclick = () => {
+    input.value = '';
+    setSearch('');
+    input.focus();
+  };
+}
+
+// =========================================================================
 // RENDERING APP TILES
 // =========================================================================
 export function renderLauncher() {
   const grid = document.getElementById('app-grid');
   const emptyState = document.getElementById('empty-state');
+  const noResults = document.getElementById('no-results');
   const counter = document.getElementById('app-counter');
   grid.innerHTML = '';
 
-  counter.innerText = `${apps.length} App${apps.length === 1 ? '' : 's'}`;
+  const query = searchQuery.trim();
+  const visible = getVisibleApps();
+  const plural = apps.length === 1 ? '' : 's';
+  counter.innerText = query
+    ? `${visible.length} of ${apps.length}`
+    : `${apps.length} App${plural}`;
   emptyState.style.display = apps.length === 0 ? 'flex' : 'none';
 
-  apps.forEach((app) => {
+  const showNoResults = apps.length > 0 && visible.length === 0;
+  noResults.style.display = showNoResults ? 'flex' : 'none';
+  if (showNoResults) {
+    document.getElementById('no-results-query').textContent = `Nothing matches “${query}”`;
+  }
+
+  visible.forEach((app) => {
     const appIdStr = escapeHtml(String(app.id));
     const tile = document.createElement('div');
+    tile.className = 'app-tile';
+    tile.dataset.appId = String(app.id);
     tile.style.cssText = "display:flex; flex-direction:column; align-items:center; position:relative; cursor:pointer;";
 
     tile.onclick = (e) => {
+      if (Date.now() < suppressClickUntil) return; // the click that ends a drag
       if (e.target.closest('.edit-action-btn')) return;
       if (isEditMode) {
-        // Tapping squircle directly in edit mode also triggers the SVG picker!
-        openIconPickerForApp(app.id);
+        // Tapping a tile in edit mode opens the style editor (colour / transparent / opacity).
+        openStyleModal(app.id);
         return;
       }
       launchApp(app, showToast, collapseFloatingMenu);
@@ -115,15 +288,10 @@ export function renderLauncher() {
     const fileCount = app.files ? Object.keys(app.files).length : 1;
     const isMultiFile = fileCount > 1;
 
-    // Render either the custom SVG or the fallback initial letter
-    const iconGraphic = app.icon
-      ? `<img src="${app.icon}" style="width:62%; height:62%; object-fit:contain; pointer-events:none;" alt="icon" />`
-      : `<span style="font-size:1.6rem; font-weight:700; letter-spacing:-0.03em;">${escapeHtml(app.name.charAt(0).toUpperCase())}</span>`;
-
     tile.innerHTML = `
       <div class="relative ${isEditMode ? 'jiggle' : ''}" style="position:relative;">
-        <button type="button" class="squircle ${app.gradient} app-press" style="width:68px; height:68px; display:flex; align-items:center; justify-content:center; color:white; border:none; box-shadow:0 8px 24px -4px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.25); cursor:pointer; pointer-events:none;">
-          ${iconGraphic}
+        <button type="button" class="squircle app-press tile-face">
+          ${iconMarkup(app)}
         </button>
         ${isMultiFile && !isEditMode ? `
           <div style="position:absolute; bottom:-3px; right:-3px; background:rgba(15,23,42,0.95); border:1px solid rgba(255,255,255,0.25); border-radius:9999px; padding:1px 5px; font-size:9px; font-weight:700; color:#38bdf8;">
@@ -167,16 +335,20 @@ export function renderLauncher() {
       <span style="margin-top:8px; font-size:12px; font-weight:600; color:rgba(255,255,255,0.9); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:80px; text-align:center; pointer-events:none;">${escapeHtml(app.name)}</span>
     `;
 
+    tile.querySelector('.tile-face').style.cssText = tileFaceStyle(app);
+
     // Event Delegation bindings on Edit Actions
     tile.querySelectorAll('[data-delete-id]').forEach(b => b.onclick = (e) => removeApp(e, app.id));
     tile.querySelectorAll('[data-rename-id]').forEach(b => b.onclick = (e) => promptRenameApp(e, app.id));
     tile.querySelectorAll('[data-export-id]').forEach(b => b.onclick = (e) => exportSingleApp(e, app.id));
     tile.querySelectorAll('[data-icon-id]').forEach(b => b.onclick = (e) => { e.stopPropagation(); openIconPickerForApp(app.id); });
 
+    if (isEditMode) attachDrag(tile);
+
     grid.appendChild(tile);
   });
 
-  if (!isEditMode) {
+  if (!isEditMode && !query) {
     const addTile = document.createElement('div');
     addTile.style.cssText = "display:flex; flex-direction:column; align-items:center; cursor:pointer;";
     addTile.onclick = () => openModal('import-modal');
@@ -193,9 +365,399 @@ export function renderLauncher() {
   }
 }
 
+// =========================================================================
+// HOME-SCREEN ORDER
+// =========================================================================
+function nextOrder() {
+  return apps.reduce((max, a) => Math.max(max, Number.isFinite(a.order) ? a.order : -1), -1) + 1;
+}
+
+// Sorts by saved `order` (apps from before this feature have none and keep
+// their install order), then rewrites order as 0..n-1 and saves whatever changed.
+async function normalizeOrder() {
+  apps.sort((a, b) => {
+    const ao = Number.isFinite(a.order) ? a.order : Infinity;
+    const bo = Number.isFinite(b.order) ? b.order : Infinity;
+    if (ao !== bo) return ao < bo ? -1 : 1;
+    return (Number(a.timestamp) || Number(a.id) || 0) - (Number(b.timestamp) || Number(b.id) || 0);
+  });
+  const changed = [];
+  apps.forEach((app, i) => {
+    if (app.order !== i) {
+      app.order = i;
+      changed.push(app);
+    }
+  });
+  if (changed.length) {
+    try {
+      await saveAppsToDB(changed);
+    } catch (err) {
+      recordLog('ORDER_ERR', `Could not save app order: ${err}`);
+    }
+  }
+}
+
 async function refreshApps() {
   apps = await loadAppsFromDB();
+  await normalizeOrder();
   renderLauncher();
+}
+
+// =========================================================================
+// TILE STYLE EDITOR (background colour, transparent, glass, opacity)
+// =========================================================================
+let styleTargetId = null;
+let styleDirty = false;
+let styleSaveTimer = null;
+let styleSwatchesBuilt = false;
+
+function makeSwatch(container, { mode, value, bg, title, className }) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'swatch' + (className ? ' ' + className : '');
+  b.title = title;
+  b.setAttribute('aria-label', title);
+  b.dataset.mode = mode;
+  if (value) b.dataset.value = value;
+  if (bg) b.style.background = bg;
+  b.onclick = () => {
+    if (mode === 'gradient') updateTileStyle({ mode, gradient: value });
+    else if (mode === 'color') updateTileStyle({ mode, color: value });
+    else updateTileStyle({ mode });
+  };
+  container.appendChild(b);
+}
+
+function buildStyleSwatches() {
+  if (styleSwatchesBuilt) return;
+  styleSwatchesBuilt = true;
+
+  const special = document.getElementById('swatches-special');
+  makeSwatch(special, { mode: 'transparent', title: 'Transparent', className: 'swatch-checker' });
+  makeSwatch(special, {
+    mode: 'glass', title: 'Frosted glass',
+    bg: 'linear-gradient(135deg, rgba(255,255,255,0.45), rgba(255,255,255,0.08))'
+  });
+
+  const grad = document.getElementById('swatches-gradient');
+  GRADIENTS.forEach(name => {
+    const [c1, c2] = GRADIENT_DEFS[name];
+    makeSwatch(grad, { mode: 'gradient', value: name, title: name.replace('from-', '').replace(/-\d+$/, ''), bg: `linear-gradient(135deg, ${c1}, ${c2})` });
+  });
+
+  const colors = document.getElementById('swatches-color');
+  SOLID_COLORS.forEach(hex => {
+    makeSwatch(colors, { mode: 'color', value: hex, title: hex, bg: hex });
+  });
+}
+
+function refreshStyleModal() {
+  const app = findApp(styleTargetId);
+  if (!app) return;
+  const s = resolveTileStyle(app);
+
+  const preview = document.getElementById('style-preview');
+  preview.style.cssText = tileFaceStyle(app);
+  preview.innerHTML = iconMarkup(app);
+  document.getElementById('style-app-name').textContent = app.name;
+
+  document.querySelectorAll('#style-modal .swatch').forEach(sw => {
+    const m = sw.dataset.mode;
+    const v = sw.dataset.value;
+    let selected = m === s.mode;
+    if (selected && m === 'gradient') selected = v === s.gradient;
+    if (selected && m === 'color') selected = v.toLowerCase() === s.color;
+    sw.classList.toggle('selected', selected);
+  });
+
+  const colorInput = document.getElementById('style-custom-color');
+  if (colorInput.value !== s.color) colorInput.value = s.color;
+  const hexInput = document.getElementById('style-custom-hex');
+  if (document.activeElement !== hexInput) hexInput.value = s.color.toUpperCase();
+
+  const slider = document.getElementById('style-opacity');
+  slider.value = String(s.opacity);
+  slider.disabled = s.mode === 'transparent' || s.mode === 'glass';
+  document.getElementById('style-opacity-label').textContent = slider.disabled ? 'n/a' : `${s.opacity}%`;
+}
+
+function updateTileStyle(patch) {
+  const app = findApp(styleTargetId);
+  if (!app) return;
+  app.tileStyle = { ...resolveTileStyle(app), ...patch };
+  styleDirty = true;
+  refreshStyleModal();
+  refreshTileFace(app);
+  clearTimeout(styleSaveTimer);
+  styleSaveTimer = setTimeout(flushStyleSave, 300);
+}
+
+async function flushStyleSave() {
+  clearTimeout(styleSaveTimer);
+  styleSaveTimer = null;
+  if (!styleDirty) return;
+  styleDirty = false;
+  const app = findApp(styleTargetId);
+  if (!app) return;
+  try {
+    await saveAppToDB(app);
+  } catch (err) {
+    recordLog('STYLE_ERR', `Could not save tile style: ${err}`);
+    showToast('Could not save tile style');
+  }
+}
+
+// Called from closeModal() so any pending change is saved when the sheet closes.
+function onStyleModalClosed() {
+  flushStyleSave();
+}
+
+function openStyleModal(appId) {
+  const app = findApp(appId);
+  if (!app) return;
+  styleTargetId = app.id;
+  styleDirty = false;
+  buildStyleSwatches();
+  refreshStyleModal();
+  openModal('style-modal');
+}
+
+async function applyStyleToAll() {
+  const app = findApp(styleTargetId);
+  if (!app) return;
+  if (!confirm(`Apply this tile style to all ${apps.length} apps?`)) return;
+  const style = resolveTileStyle(app);
+  apps.forEach(a => { a.tileStyle = { ...style }; });
+  clearTimeout(styleSaveTimer);
+  styleDirty = false;
+  try {
+    await saveAppsToDB(apps);
+  } catch (err) {
+    recordLog('STYLE_ERR', `Could not save styles: ${err}`);
+    showToast('Could not save tile styles');
+    return;
+  }
+  renderLauncher();
+  showToast('Style applied to all apps');
+}
+
+function initStyleModal() {
+  const colorInput = document.getElementById('style-custom-color');
+  const hexInput = document.getElementById('style-custom-hex');
+  const slider = document.getElementById('style-opacity');
+
+  colorInput.addEventListener('input', () => updateTileStyle({ mode: 'color', color: colorInput.value }));
+
+  hexInput.addEventListener('input', () => {
+    const hex = normalizeHex(hexInput.value);
+    if (hex) updateTileStyle({ mode: 'color', color: hex });
+  });
+  hexInput.addEventListener('blur', refreshStyleModal);
+
+  slider.addEventListener('input', () => updateTileStyle({ opacity: Number(slider.value) }));
+
+  document.getElementById('btn-style-reset').onclick = () => {
+    const app = findApp(styleTargetId);
+    if (!app) return;
+    delete app.tileStyle;
+    styleDirty = true;
+    refreshStyleModal();
+    refreshTileFace(app);
+    clearTimeout(styleSaveTimer);
+    styleSaveTimer = setTimeout(flushStyleSave, 300);
+  };
+  document.getElementById('btn-style-all').onclick = applyStyleToAll;
+  document.getElementById('btn-style-icon').onclick = () => {
+    const id = styleTargetId;
+    closeModal('style-modal');
+    if (id != null) openIconPickerForApp(id);
+  };
+}
+
+// =========================================================================
+// DRAG TO REARRANGE (edit mode: touch & hold a tile, or click-drag with a mouse)
+// =========================================================================
+const LONG_PRESS_MS = 260;   // touch: hold this long before the tile lifts
+const SCROLL_CANCEL_PX = 8;  // touch: moving earlier than this means "scroll", not "drag"
+const MOUSE_DRAG_PX = 5;
+
+let press = null; // finger/mouse is down on a tile
+let drag = null;  // a tile is currently lifted
+
+function layoutRect(el) {
+  // Position ignoring any in-flight animation transform, so hit-testing is stable.
+  const main = document.getElementById('app-scroller');
+  const mr = main.getBoundingClientRect();
+  const left = mr.left + el.offsetLeft - main.scrollLeft;
+  const top = mr.top + el.offsetTop - main.scrollTop;
+  return { left, top, right: left + el.offsetWidth, bottom: top + el.offsetHeight };
+}
+
+function gridTiles() {
+  return Array.from(document.getElementById('app-grid').children).filter(el => el.classList.contains('app-tile'));
+}
+
+function attachDrag(tile) {
+  tile.addEventListener('contextmenu', (e) => e.preventDefault());
+  tile.addEventListener('pointerdown', (e) => {
+    if (!isEditMode || drag || press) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.target.closest('.edit-action-btn')) return;
+    // Let events follow the finger even after the tile moves in the DOM.
+    try { if (e.target.hasPointerCapture && e.target.hasPointerCapture(e.pointerId)) e.target.releasePointerCapture(e.pointerId); } catch (_) {}
+
+    press = {
+      tile, pointerId: e.pointerId, pointerType: e.pointerType,
+      startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY, timer: null
+    };
+    if (e.pointerType !== 'mouse') {
+      press.timer = setTimeout(beginDrag, LONG_PRESS_MS);
+    }
+  });
+}
+
+function beginDrag() {
+  if (!press || drag) return;
+  if (press.timer) { clearTimeout(press.timer); press.timer = null; }
+
+  if (searchQuery.trim()) {
+    showToast('Clear the search to rearrange apps');
+    press = null;
+    return;
+  }
+
+  const tile = press.tile;
+  const rect = tile.getBoundingClientRect();
+  const ghost = tile.cloneNode(true);
+  ghost.classList.add('drag-ghost');
+  ghost.removeAttribute('data-app-id');
+  ghost.style.position = 'fixed';
+  ghost.style.margin = '0';
+  ghost.style.width = rect.width + 'px';
+  ghost.style.height = rect.height + 'px';
+  ghost.style.left = rect.left + 'px';
+  ghost.style.top = rect.top + 'px';
+  document.body.appendChild(ghost);
+  tile.classList.add('is-placeholder');
+
+  drag = {
+    tile, ghost,
+    offX: press.x - rect.left,
+    offY: press.y - rect.top,
+    scrollTimer: setInterval(autoScrollTick, 16)
+  };
+  try { if (navigator.vibrate) navigator.vibrate(12); } catch (_) {}
+  updateDrag();
+}
+
+function updateDrag() {
+  if (!drag || !press) return;
+  const { ghost, tile } = drag;
+  ghost.style.left = (press.x - drag.offX) + 'px';
+  ghost.style.top = (press.y - drag.offY) + 'px';
+
+  const tiles = gridTiles();
+  const target = tiles.find(t => {
+    if (t === tile) return false;
+    const r = layoutRect(t);
+    return press.x >= r.left && press.x <= r.right && press.y >= r.top && press.y <= r.bottom;
+  });
+  if (!target) return;
+
+  // FLIP: remember where everything is, move the tile, then slide the others into place.
+  const first = new Map(tiles.map(t => [t, t.getBoundingClientRect()]));
+  if (tiles.indexOf(tile) < tiles.indexOf(target)) target.after(tile);
+  else target.before(tile);
+
+  tiles.forEach(t => {
+    if (t === tile || !t.animate) return;
+    const f = first.get(t);
+    const l = layoutRect(t);
+    const dx = f.left - l.left;
+    const dy = f.top - l.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    t.animate(
+      [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }],
+      { duration: 170, easing: 'ease-out' }
+    );
+  });
+}
+
+function autoScrollTick() {
+  if (!drag || !press) return;
+  const main = document.getElementById('app-scroller');
+  const r = main.getBoundingClientRect();
+  const zone = 56;
+  let dy = 0;
+  if (press.y < r.top + zone) dy = -Math.min(14, Math.ceil((r.top + zone - press.y) / 5));
+  else if (press.y > r.bottom - zone) dy = Math.min(14, Math.ceil((press.y - (r.bottom - zone)) / 5));
+  if (dy) {
+    main.scrollTop += dy;
+    updateDrag();
+  }
+}
+
+function finishPress() {
+  const p = press;
+  press = null;
+  if (p && p.timer) clearTimeout(p.timer);
+  if (!drag) return;
+
+  const { tile, ghost, scrollTimer } = drag;
+  drag = null;
+  clearInterval(scrollTimer);
+  ghost.remove();
+  tile.classList.remove('is-placeholder');
+  suppressClickUntil = Date.now() + 350; // swallow the click that follows letting go
+  commitOrderFromDOM();
+}
+
+async function commitOrderFromDOM() {
+  const byId = new Map(apps.map(a => [String(a.id), a]));
+  const reordered = gridTiles().map(t => byId.get(t.dataset.appId)).filter(Boolean);
+  if (reordered.length !== apps.length) { renderLauncher(); return; }
+
+  const changed = [];
+  reordered.forEach((app, i) => {
+    if (app.order !== i) {
+      app.order = i;
+      changed.push(app);
+    }
+  });
+  apps = reordered;
+  if (changed.length === 0) return;
+
+  try {
+    await saveAppsToDB(changed);
+    recordLog('APP_REORDERED', `Home screen order saved (${changed.length} moved)`);
+  } catch (err) {
+    recordLog('ORDER_ERR', `Could not save app order: ${err}`);
+    showToast('Could not save new order');
+  }
+}
+
+function initDragListeners() {
+  document.addEventListener('pointermove', (e) => {
+    if (!press || e.pointerId !== press.pointerId) return;
+    press.x = e.clientX;
+    press.y = e.clientY;
+    if (drag) { updateDrag(); return; }
+
+    const moved = Math.hypot(press.x - press.startX, press.y - press.startY);
+    if (press.pointerType === 'mouse') {
+      if (moved > MOUSE_DRAG_PX) beginDrag();
+    } else if (moved > SCROLL_CANCEL_PX) {
+      // Finger moved before the long-press fired: the user is scrolling the grid.
+      clearTimeout(press.timer);
+      press = null;
+    }
+  });
+  document.addEventListener('pointerup', (e) => { if (press && e.pointerId === press.pointerId) finishPress(); });
+  document.addEventListener('pointercancel', (e) => { if (press && e.pointerId === press.pointerId) finishPress(); });
+  window.addEventListener('blur', finishPress);
+
+  // Once a tile is lifted, the page must not scroll under the finger.
+  document.addEventListener('touchmove', (e) => { if (drag && e.cancelable) e.preventDefault(); }, { passive: false });
 }
 
 // =========================================================================
@@ -225,6 +787,7 @@ async function finalizeMultiFileApp(appFiles, fallbackName) {
     files: appFiles,
     code: appFiles[entryName] ? appFiles[entryName].content : '',
     icon: null,
+    order: nextOrder(), // new apps land at the end of the home screen
     timestamp: Date.now()
   };
 
@@ -357,6 +920,8 @@ function handleBackupSelected(event) {
             files: item.files || { 'index.html': { content: item.code, isBinary: false, type: 'text/html' } },
             code: item.code || (item.files && item.files[item.entry || 'index.html']?.content) || '',
             icon: item.icon || null,
+            tileStyle: item.tileStyle || undefined,
+            order: Number.isFinite(item.order) ? item.order : undefined,
             timestamp: item.timestamp || Date.now()
           };
           await saveAppToDB(appObj);
@@ -379,6 +944,9 @@ function handleBackupSelected(event) {
 window.addEventListener('DOMContentLoaded', async () => {
   initLogger();
   setupFloatingMenu();
+  initSearch();
+  initStyleModal();
+  initDragListeners();
   await initDatabase();
   await refreshApps();
 
@@ -395,6 +963,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     isEditMode = !isEditMode;
     editBtn.innerText = isEditMode ? 'Done' : 'Edit';
     editBtn.style.background = isEditMode ? '#0A84FF' : 'rgba(255,255,255,0.1)';
+    document.getElementById('footer-hint').innerText = isEditMode
+      ? 'Touch & hold a tile to move it · Tap a tile to change its color'
+      : 'Tap an app to launch full-screen';
     renderLauncher();
   };
 
