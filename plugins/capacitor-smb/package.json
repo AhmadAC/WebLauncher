@@ -1,18 +1,9 @@
 {
-  "name": "capacitor-smb",
+  "name": "capacitor-files",
   "version": "1.0.0",
-  "description": "Native SMB2/3 client for Capacitor iOS (AMSMB2) used by companion apps like OpenFiles",
+  "description": "Native iOS Files-app folder access (UIDocumentPicker + security-scoped bookmarks) for Capacitor, used by companion apps like OpenFiles",
   "license": "MIT",
-  "files": [
-    "ios/Sources",
-    "CapacitorSmb.podspec"
-  ],
-  "peerDependencies": {
-    "@capacitor/core": "^6.0.0"
-  },
-  "capacitor": {
-    "ios": {
-      "src": "ios"
-    }
-  }
+  "files": ["ios/Sources", "CapacitorFiles.podspec"],
+  "peerDependencies": { "@capacitor/core": "^6.0.0" },
+  "capacitor": { "ios": { "src": "ios" } }
 }
