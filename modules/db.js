@@ -42,6 +42,20 @@ export function saveAppToDB(app) {
   });
 }
 
+// Saves several apps in ONE transaction (used for reordering / "apply style to all").
+export function saveAppsToDB(list) {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject("DB not initialized");
+    if (!list || list.length === 0) return resolve();
+    const tx = db.transaction('apps', 'readwrite');
+    const store = tx.objectStore('apps');
+    list.forEach(app => store.put(app));
+    tx.oncomplete = () => resolve();
+    tx.onerror = (e) => reject(e);
+    tx.onabort = (e) => reject(e);
+  });
+}
+
 export function deleteAppFromDB(id) {
   return new Promise((resolve) => {
     if (!db) return resolve();

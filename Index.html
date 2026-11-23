@@ -85,6 +85,40 @@
     }
     .import-card-btn:hover { background: rgba(255, 255, 255, 0.14); }
     .import-card-btn:active { transform: scale(0.98); }
+
+    /* Search bar */
+    #search-input { -webkit-appearance: none; appearance: none; user-select: text; -webkit-user-select: text; }
+    #search-input::-webkit-search-cancel-button,
+    #search-input::-webkit-search-decoration { -webkit-appearance: none; display: none; }
+    #search-input:focus { border-color: rgba(10,132,255,0.8) !important; background: rgba(255,255,255,0.12) !important; }
+    #search-input::placeholder { color: rgba(255,255,255,0.4); }
+
+    /* Home-screen tiles (drag & drop) */
+    .app-tile { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+    .app-tile.is-placeholder { opacity: 0.25; }
+    .drag-ghost { position: fixed; z-index: 100000; pointer-events: none; opacity: 0.95; transform: scale(1.14); filter: drop-shadow(0 14px 22px rgba(0,0,0,0.6)); }
+    .drag-ghost .jiggle { animation: none; }
+
+    /* Tile style editor swatches */
+    .swatch-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+    .swatch {
+      aspect-ratio: 1 / 1; width: 100%; border-radius: 22.5%; cursor: pointer; padding: 0;
+      border: 1px solid rgba(255,255,255,0.18); position: relative; overflow: hidden;
+    }
+    .swatch.selected { box-shadow: 0 0 0 2px #090a10, 0 0 0 4px #0A84FF; }
+    .swatch-checker {
+      background-color: #1e2230;
+      background-image:
+        linear-gradient(45deg, #3a4052 25%, transparent 25%, transparent 75%, #3a4052 75%),
+        linear-gradient(45deg, #3a4052 25%, transparent 25%, transparent 75%, #3a4052 75%);
+      background-size: 12px 12px; background-position: 0 0, 6px 6px;
+    }
+    .style-section-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,0.45); margin-bottom: 8px; }
+    .style-btn { flex: 1; padding: 10px; border-radius: 12px; background: rgba(255,255,255,0.1); font-size: 0.72rem; font-weight: 600; color: white; cursor: pointer; }
+    input[type=range].opacity-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 9999px; background: rgba(255,255,255,0.18); outline: none; }
+    input[type=range].opacity-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 9999px; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+    input[type=range].opacity-slider::-moz-range-thumb { width: 22px; height: 22px; border: 0; border-radius: 9999px; background: #fff; }
+    input[type=range].opacity-slider:disabled { opacity: 0.35; }
   </style>
 </head>
 <body>
@@ -99,7 +133,7 @@
     <div>
       <h1 style="font-size:1.25rem; font-weight:700; letter-spacing:-0.02em; display:flex; align-items:center; gap:8px;">
         <span>App Launcher</span>
-        <span id="app-counter" style="font-size:0.75rem; padding:2px 10px; border-radius:9999px; background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.7); font-weight:500;">0 Apps</span>
+        <span id="app-counter" style="font-size:0.75rem; padding:2px 10px; border-radius:9999px; background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.7); font-weight:500; white-space:nowrap; flex-shrink:0;">0 Apps</span>
       </h1>
     </div>
 
@@ -134,8 +168,32 @@
     </div>
   </header>
 
+  <!-- Search Bar -->
+  <div id="search-wrap" style="position:relative; z-index:20; width:100%; max-width:588px; margin:0 auto; padding:2px 24px 8px 24px;">
+    <div style="position:relative;">
+      <svg style="position:absolute; left:12px; top:50%; transform:translateY(-50%); width:16px; height:16px; color:rgba(255,255,255,0.45); pointer-events:none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="7"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      </svg>
+      <input type="search" id="search-input" placeholder="Search apps" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search" aria-label="Search apps"
+        style="width:100%; height:38px; padding:0 38px 0 36px; border-radius:12px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.12); color:white; font-size:16px; outline:none;">
+      <button type="button" id="search-clear" title="Clear search" aria-label="Clear search"
+        style="display:none; position:absolute; right:8px; top:50%; transform:translateY(-50%); width:22px; height:22px; border-radius:9999px; background:rgba(255,255,255,0.22); color:white; align-items:center; justify-content:center; cursor:pointer;">
+        <svg style="width:12px; height:12px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+
   <!-- App Grid -->
-  <main style="position:relative; z-index:10; flex:1; overflow-y:auto; padding:8px 24px; max-width:540px; margin:0 auto; width:100%;" class="no-scrollbar">
+  <main id="app-scroller" style="position:relative; z-index:10; flex:1; min-height:0; overflow-y:auto; padding:8px 24px; max-width:540px; margin:0 auto; width:100%;" class="no-scrollbar">
+    <div id="no-results" style="display:none; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:60px 0; gap:6px;">
+      <div style="font-size:1rem; font-weight:700; color:rgba(255,255,255,0.9);">No matching apps</div>
+      <div id="no-results-query" style="font-size:0.75rem; color:rgba(255,255,255,0.5); max-width:260px; word-break:break-word;"></div>
+    </div>
+
     <div id="empty-state" style="display:none; flex-direction:column; align-items:center; justify-content:center; height:100%; text-align:center; padding:60px 0; gap:16px;">
       <div style="width:64px; height:64px; border-radius:24px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.4);">
         <svg style="width:32px; height:32px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -171,7 +229,7 @@
   </main>
 
   <footer style="position:relative; z-index:20; padding:4px 24px; display:flex; justify-content:center; font-size:11px; color:rgba(255,255,255,0.4);">
-    <span>Tap an app to launch full-screen</span>
+    <span id="footer-hint">Tap an app to launch full-screen</span>
   </footer>
 
   <!-- FILE PICKERS -->
@@ -265,6 +323,70 @@
       <div style="display:flex; gap:8px;">
         <button type="button" class="btn-close-modal" data-target="rename-modal" style="flex:1; padding:10px; border-radius:12px; background:rgba(255,255,255,0.1); font-size:0.75rem; font-weight:600; color:white; cursor:pointer;">Cancel</button>
         <button type="button" id="btn-save-rename" style="flex:1; padding:10px; border-radius:12px; background:#0A84FF; font-size:0.75rem; font-weight:600; color:white; cursor:pointer;">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TILE STYLE MODAL -->
+  <div id="style-modal" style="position:fixed; inset:0; z-index:60; display:none; background:rgba(0,0,0,0.75); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); align-items:center; justify-content:center; padding:16px;">
+    <div class="glass-panel no-scrollbar" style="width:100%; max-width:360px; max-height:calc(100vh - 32px); overflow-y:auto; border-radius:24px; padding:20px; display:flex; flex-direction:column; gap:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:12px;">
+        <h2 style="font-size:1rem; font-weight:700; color:white;">Tile Style</h2>
+        <button type="button" class="btn-close-modal" data-target="style-modal" style="background:rgba(255,255,255,0.1); border-radius:9999px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.7); cursor:pointer;">
+          <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Live preview on a checkerboard so transparency is visible -->
+      <div style="display:flex; align-items:center; gap:14px;">
+        <div class="swatch-checker" style="width:92px; height:92px; border-radius:22px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <div id="style-preview" class="squircle" style="width:68px; height:68px; display:flex; align-items:center; justify-content:center; color:white;"></div>
+        </div>
+        <div style="min-width:0;">
+          <div id="style-app-name" style="font-size:0.95rem; font-weight:700; color:white; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></div>
+          <div style="font-size:0.7rem; color:rgba(255,255,255,0.5); margin-top:2px;">Changes save automatically</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="style-section-label">Special</div>
+        <div id="swatches-special" class="swatch-grid"></div>
+      </div>
+      <div>
+        <div class="style-section-label">Gradients</div>
+        <div id="swatches-gradient" class="swatch-grid"></div>
+      </div>
+      <div>
+        <div class="style-section-label">Colors</div>
+        <div id="swatches-color" class="swatch-grid"></div>
+      </div>
+
+      <div>
+        <div class="style-section-label">Custom color</div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <input type="color" id="style-custom-color" value="#2563eb" style="width:48px; height:36px; padding:0; border:1px solid rgba(255,255,255,0.2); border-radius:10px; background:transparent; cursor:pointer;">
+          <input type="text" id="style-custom-hex" maxlength="7" placeholder="#2563EB" autocapitalize="off" autocomplete="off" spellcheck="false"
+            style="flex:1; min-width:0; height:36px; padding:0 12px; border-radius:10px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white; font-size:16px; font-family:ui-monospace, Menlo, monospace; outline:none; -webkit-user-select:text; user-select:text;">
+        </div>
+      </div>
+
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:center;" class="style-section-label">
+          <span>Opacity</span><span id="style-opacity-label">100%</span>
+        </div>
+        <input type="range" id="style-opacity" class="opacity-slider" min="0" max="100" step="1" value="100">
+      </div>
+
+      <div style="display:flex; gap:8px;">
+        <button type="button" id="btn-style-icon" class="style-btn">Change Icon</button>
+        <button type="button" id="btn-style-reset" class="style-btn">Reset</button>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button type="button" id="btn-style-all" class="style-btn">Apply to All</button>
+        <button type="button" class="btn-close-modal style-btn" data-target="style-modal" style="background:#0A84FF;">Done</button>
       </div>
     </div>
   </div>
@@ -383,7 +505,7 @@
 
     <!-- Protected IFrame Viewport -->
     <div style="flex:1; width:100%; min-height:0; position:relative; background:#000000; overflow:hidden;">
-      <iframe id="runtime-iframe" style="width:100%; height:100%; border:0; display:block;" allow="bluetooth; camera; web-share; clipboard-read; clipboard-write"></iframe>
+      <iframe id="runtime-iframe" style="width:100%; height:100%; border:0; display:block;" allow="autoplay; bluetooth; camera; web-share; clipboard-read; clipboard-write"></iframe>
     </div>
 
     <div id="runtime-safe-bottom" style="width:100%; height:max(env(safe-area-inset-bottom, 20px), 24px); background:#000000; flex-shrink:0;"></div>
