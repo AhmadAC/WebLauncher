@@ -32,11 +32,6 @@ jobs:
           # Install Capacitor 6, Bluetooth LE, and Capacitor 6-compatible Text-to-Speech (v5.x)
           npm install @capacitor/core@^6.0.0 @capacitor/cli@^6.0.0 @capacitor/ios@^6.0.0 @capacitor-community/bluetooth-le@^6.0.0 @capacitor-community/text-to-speech@^5.1.0
 
-          # Native SMB plugin (Swift + AMSMB2) used by companion apps like OpenFiles
-          if [ -d plugins/capacitor-smb ]; then
-            npm install ./plugins/capacitor-smb
-          fi
-
           # Create www directory and copy web files cleanly
           mkdir -p www
 
@@ -50,7 +45,7 @@ jobs:
           # Copy any companion modules, assets, and styles into web root
           cp -r *.css *.js assets modules www/ 2>/dev/null || true
 
-      # Step 4: Configure Capacitor & Fix Deployment Target
+      # Step 4: Configure Capacitor, Deployment Target, and Native SMB (SPM)
       - name: Configure Capacitor iOS Platform
         run: |
           # Remove any previous conflicting build artifacts
@@ -60,7 +55,7 @@ jobs:
           npx cap init "WebLauncher" "com.ahmadac.weblauncher" --web-dir "www"
 
           # Add iOS platform files
-          npx cap add ios || true
+          npx cap add ios
 
           # Inject mandatory iOS Bluetooth, Camera, Local Wi-Fi Network, and ATS Entitlements
           if [ -f ios/App/App/Info.plist ]; then
@@ -95,14 +90,55 @@ jobs:
           # Sync capacitor plugins and native code
           npx cap sync ios
 
-          # Make sure the SMB plugin class is registered with the Capacitor bridge
-          if [ -d plugins/capacitor-smb ]; then
-            node -e "const fs=require('fs');const p='ios/App/App/capacitor.config.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));c.packageClassList=c.packageClassList||[];if(!c.packageClassList.includes('SmbPlugin')){c.packageClassList.push('SmbPlugin');fs.writeFileSync(p,JSON.stringify(c,null,2));console.log('SmbPlugin added to packageClassList manually')}else{console.log('SmbPlugin registered by cap sync')}"
+          # Wire SmbPlugin.swift + AMSMB2 (Swift Package Manager) into the App target
+          # (AMSMB2 3.0+ is distributed via SPM rather than CocoaPods Trunk)
+          if [ -f plugins/capacitor-smb/ios/Sources/SmbPlugin/SmbPlugin.swift ]; then
+            cp -f plugins/capacitor-smb/ios/Sources/SmbPlugin/SmbPlugin.swift ios/App/App/SmbPlugin.swift
+
+            ruby << 'RUBY'
+          require 'xcodeproj'
+
+          project_path = 'ios/App/App.xcodeproj'
+          project = Xcodeproj::Project.open(project_path)
+          app_target = project.targets.find { |t| t.name == 'App' } || project.targets.first
+
+          app_group = project.main_group.find_subpath('App', true)
+          unless app_group.files.any? { |f| f.path == 'SmbPlugin.swift' }
+            file_ref = app_group.new_file('SmbPlugin.swift')
+            app_target.add_file_references([file_ref])
+          end
+
+          pkg_url = 'https://github.com/amosavian/AMSMB2.git'
+          pkg_ref = project.root_object.package_references.find { |r| r.respond_to?(:repositoryURL) && r.repositoryURL == pkg_url }
+          unless pkg_ref
+            pkg_ref = project.new(Xcodeproj::Project::Object::XCRemoteSwiftPackageReference)
+            pkg_ref.repositoryURL = pkg_url
+            pkg_ref.requirement = { 'kind' => 'upToNextMajorVersion', 'minimumVersion' => '4.0.0' }
+            project.root_object.package_references << pkg_ref
+          end
+
+          unless app_target.package_product_dependencies.any? { |d| d.product_name == 'AMSMB2' }
+            pkg_product = project.new(Xcodeproj::Project::Object::XCSwiftPackageProductDependency)
+            pkg_product.package = pkg_ref
+            pkg_product.product_name = 'AMSMB2'
+            app_target.package_product_dependencies << pkg_product
+
+            build_file = project.new(Xcodeproj::Project::Object::PBXBuildFile)
+            build_file.product_ref = pkg_product
+            app_target.frameworks_build_phase.files << build_file
+          end
+
+          project.save
+          puts 'Wired SmbPlugin.swift and AMSMB2 Swift Package into App.xcodeproj'
+          RUBY
+
+            node -e "const fs=require('fs');const p='ios/App/App/capacitor.config.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));c.packageClassList=c.packageClassList||[];if(!c.packageClassList.includes('SmbPlugin')){c.packageClassList.push('SmbPlugin');fs.writeFileSync(p,JSON.stringify(c,null,2));console.log('SmbPlugin added to packageClassList')}else{console.log('SmbPlugin registered by cap sync')}"
           fi
 
-          # Run pod install with updated target
+          # Run pod install with updated target and resolve Swift packages
           cd ios/App
           pod install
+          xcodebuild -workspace App.xcworkspace -scheme App -derivedDataPath build -resolvePackageDependencies
           cd ../..
 
       # Step 5: Build Xcode Workspace (Unsigned for Sideloading)
