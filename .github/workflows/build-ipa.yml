@@ -91,7 +91,6 @@ jobs:
           npx cap sync ios
 
           # Wire SmbPlugin.swift + AMSMB2 (Swift Package Manager) into the App target
-          # (AMSMB2 3.0+ is distributed via SPM rather than CocoaPods Trunk)
           if [ -f plugins/capacitor-smb/ios/Sources/SmbPlugin/SmbPlugin.swift ]; then
             cp -f plugins/capacitor-smb/ios/Sources/SmbPlugin/SmbPlugin.swift ios/App/App/SmbPlugin.swift
 
@@ -117,15 +116,45 @@ jobs:
             project.root_object.package_references << pkg_ref
           end
 
-          unless app_target.package_product_dependencies.any? { |d| d.product_name == 'AMSMB2' }
+          pkg_product = app_target.package_product_dependencies.find { |d| d.product_name == 'AMSMB2' }
+          unless pkg_product
             pkg_product = project.new(Xcodeproj::Project::Object::XCSwiftPackageProductDependency)
             pkg_product.package = pkg_ref
             pkg_product.product_name = 'AMSMB2'
             app_target.package_product_dependencies << pkg_product
+          end
 
+          unless app_target.frameworks_build_phase.files.any? { |f| f.product_ref == pkg_product }
             build_file = project.new(Xcodeproj::Project::Object::PBXBuildFile)
             build_file.product_ref = pkg_product
             app_target.frameworks_build_phase.files << build_file
+          end
+
+          # Create or locate Embed Frameworks phase for SPM dynamic frameworks
+          embed_phase = app_target.copy_files_build_phases.find do |p|
+            p.name == 'Embed Frameworks' || p.dst_subfolder_spec.to_s == '10'
+          end
+          unless embed_phase
+            embed_phase = project.new(Xcodeproj::Project::Object::PBXCopyFilesBuildPhase)
+            embed_phase.name = 'Embed Frameworks'
+            embed_phase.dst_subfolder_spec = '10'
+            embed_phase.dst_path = ''
+            app_target.build_phases << embed_phase
+          end
+
+          unless embed_phase.files.any? { |f| f.product_ref == pkg_product }
+            embed_file = project.new(Xcodeproj::Project::Object::PBXBuildFile)
+            embed_file.product_ref = pkg_product
+            embed_file.settings = { 'ATTRIBUTES' => ['CodeSignOnCopy', 'RemoveHeadersOnCopy'] }
+            embed_phase.files << embed_file
+          end
+
+          # Ensure runtime search path includes embedded Frameworks folder
+          app_target.build_configurations.each do |config|
+            rpath = config.build_settings['LD_RUNPATH_SEARCH_PATHS'] || '$(inherited) @executable_path/Frameworks'
+            unless rpath.include?('@executable_path/Frameworks')
+              config.build_settings['LD_RUNPATH_SEARCH_PATHS'] = "#{rpath} @executable_path/Frameworks"
+            end
           end
 
           project.save
@@ -156,11 +185,34 @@ jobs:
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             build
 
-      # Step 6: Create Payload & Package .ipa
+      # Step 6: Create Payload & Package .ipa with Embedded Dynamic Frameworks
       - name: Package Payload into IPA
         run: |
+          APP_PATH="ios/App/build/Build/Products/Release-iphoneos/App.app"
+          FRAMEWORKS_PATH="$APP_PATH/Frameworks"
+          mkdir -p "$FRAMEWORKS_PATH"
+
+          # Copy any dynamic frameworks built by SPM (such as AMSMB2 from PackageFrameworks) into Frameworks
+          find ios/App/build/Build/Products/Release-iphoneos -name "*.framework" ! -path "*/App.app/*" | while read -r fw; do
+            fw_name=$(basename "$fw")
+            echo "Embedding framework into App.app/Frameworks: $fw_name"
+            rm -rf "$FRAMEWORKS_PATH/$fw_name"
+            cp -R "$fw" "$FRAMEWORKS_PATH/"
+          done
+
+          # Ad-hoc sign embedded frameworks and binaries for LiveContainer / dlopen compatibility
+          if command -v codesign >/dev/null 2>&1; then
+            find "$FRAMEWORKS_PATH" -name "*.framework" | while read -r fw; do
+              echo "Ad-hoc signing framework: $fw"
+              codesign --force --sign - --timestamp=none "$fw" 2>/dev/null || true
+            done
+            if [ -f "$APP_PATH/App" ]; then
+              codesign --force --sign - --timestamp=none "$APP_PATH/App" 2>/dev/null || true
+            fi
+          fi
+
           mkdir -p build/IPA/Payload
-          cp -R ios/App/build/Build/Products/Release-iphoneos/App.app build/IPA/Payload/
+          cp -R "$APP_PATH" build/IPA/Payload/
           cd build/IPA
           zip -r WebLauncher.ipa Payload
           echo "IPA successfully created."
