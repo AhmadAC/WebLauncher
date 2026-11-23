@@ -56,6 +56,9 @@ export function assembleAndLoadApp(app) {
       if (!window.Smb && window.parent) {
         window.Smb = window.parent.Smb || window.parent.Capacitor?.Plugins?.Smb || null;
       }
+      if (!window.TextToSpeech && window.parent) {
+        window.TextToSpeech = window.parent.TextToSpeech || window.parent.Capacitor?.Plugins?.TextToSpeech || null;
+      }
       if (window.parent && window.parent.recordChildLog) {
         window.recordChildLog = window.parent.recordChildLog;
         const _origErr = console.error;

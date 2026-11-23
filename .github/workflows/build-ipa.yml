@@ -29,8 +29,8 @@ jobs:
             npm init -y
           fi
 
-          # Install Capacitor 6, Bluetooth LE, and Text-to-Speech plugins
-          npm install --legacy-peer-deps @capacitor/core@^6.0.0 @capacitor/cli@^6.0.0 @capacitor/ios@^6.0.0 @capacitor-community/bluetooth-le@^6.0.0 @capacitor-community/text-to-speech@^6.0.0
+          # Install Capacitor 6, Bluetooth LE, and Capacitor 6-compatible Text-to-Speech (v5.x)
+          npm install @capacitor/core@^6.0.0 @capacitor/cli@^6.0.0 @capacitor/ios@^6.0.0 @capacitor-community/bluetooth-le@^6.0.0 @capacitor-community/text-to-speech@^5.1.0
 
           # Native SMB plugin (Swift + AMSMB2) used by companion apps like OpenFiles
           if [ -d plugins/capacitor-smb ]; then
