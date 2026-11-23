@@ -2,6 +2,103 @@ import Foundation
 import Capacitor
 import AMSMB2
 
+/// Bonjour service discovery for local SMB servers
+final class SMBBonjourDiscovery: NSObject, NetServiceBrowserDelegate, NetServiceDelegate {
+    private let browser = NetServiceBrowser()
+    private var pendingServices: [NetService] = []
+    private var foundServers: [[String: Any]] = []
+    private var completion: (([[String: Any]]) -> Void)?
+
+    func discover(timeout: TimeInterval = 3.5, completion: @escaping ([[String: Any]]) -> Void) {
+        self.completion = completion
+        self.foundServers = []
+        self.pendingServices = []
+
+        browser.delegate = self
+        browser.searchForServices(ofType: "_smb._tcp.", inDomain: "local.")
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { [weak self] in
+            guard let self = self else { return }
+            self.stop()
+        }
+    }
+
+    func stop() {
+        browser.stop()
+        for s in pendingServices {
+            s.stop()
+        }
+        pendingServices.removeAll()
+        let cb = completion
+        completion = nil
+        cb?(foundServers)
+    }
+
+    func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
+        pendingServices.append(service)
+        service.delegate = self
+        service.resolve(withTimeout: 3.0)
+    }
+
+    func netServiceDidResolveAddress(_ sender: NetService) {
+        var ip = ""
+        if let addresses = sender.addresses {
+            for addrData in addresses {
+                addrData.withUnsafeBytes { rawPtr in
+                    guard let sockaddr = rawPtr.bindMemory(to: sockaddr.self).baseAddress else { return }
+                    if sockaddr.pointee.sa_family == UInt8(AF_INET) {
+                        var sin = rawPtr.bindMemory(to: sockaddr_in.self).baseAddress!.pointee
+                        var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+                        if inet_ntop(AF_INET, &sin.sin_addr, &buffer, socklen_t(INET_ADDRSTRLEN)) != nil {
+                            ip = String(cString: buffer)
+                        }
+                    }
+                }
+                if !ip.isEmpty { break }
+            }
+        }
+
+        var host = sender.hostName ?? ""
+        while host.hasSuffix(".") { host = String(host.dropLast()) }
+
+        let srvName = sender.name
+        let port = sender.port > 0 ? sender.port : 445
+        let resolvedHost = !ip.isEmpty ? ip : host
+
+        let already = foundServers.contains { item in
+            (item["host"] as? String == resolvedHost) || (item["name"] as? String == srvName)
+        }
+
+        if !already && (!srvName.isEmpty || !resolvedHost.isEmpty) {
+            foundServers.append([
+                "name": srvName,
+                "host": resolvedHost,
+                "ip": ip,
+                "hostName": host,
+                "port": port
+            ])
+        }
+    }
+
+    func netService(_ sender: NetService, didNotResolve errorDict: [String: NSNumber]) {
+        var host = sender.hostName ?? ""
+        while host.hasSuffix(".") { host = String(host.dropLast()) }
+        let srvName = sender.name
+        let already = foundServers.contains { item in
+            item["name"] as? String == srvName
+        }
+        if !already && !srvName.isEmpty {
+            foundServers.append([
+                "name": srvName,
+                "host": host.isEmpty ? srvName : host,
+                "ip": "",
+                "hostName": host,
+                "port": 445
+            ])
+        }
+    }
+}
+
 /// JS name: "Smb" (Capacitor.Plugins.Smb)
 /// All paths are relative to the share root, without a leading slash ("" = root).
 @objc(SmbPlugin)
@@ -20,14 +117,46 @@ public class SmbPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "writeAbort", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "mkdir", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "remove", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "move", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "move", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "discoverServers", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "listShares", returnType: CAPPluginReturnPromise)
     ]
 
     private let lock = NSLock()
     private var sessions: [String: SMB2Manager] = [:]
     private var uploads: [String: URL] = [:]
+    private var activeDiscovery: SMBBonjourDiscovery?
 
     // MARK: - Helpers
+
+    private func parseHostAndShare(rawHost: String, rawShare: String?) -> (host: String, port: Int, share: String) {
+        var host = rawHost.trimmingCharacters(in: .whitespacesAndNewlines)
+        if host.lowercased().hasPrefix("smb://") {
+            host = String(host.dropFirst(6))
+        }
+        var sh = (rawShare ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        while sh.hasPrefix("/") { sh = String(sh.dropFirst()) }
+        while sh.hasSuffix("/") { sh = String(sh.dropLast()) }
+
+        if let slashIdx = host.firstIndex(of: "/") {
+            let pathPart = String(host[host.index(after: slashIdx)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            host = String(host[..<slashIdx])
+            if sh.isEmpty && !pathPart.isEmpty {
+                sh = pathPart
+            }
+        }
+        while host.hasSuffix("/") { host = String(host.dropLast()) }
+
+        var port = 0
+        if let colonIdx = host.lastIndex(of: ":"), colonIdx > host.startIndex {
+            let portStr = String(host[host.index(after: colonIdx)...])
+            if let p = Int(portStr) {
+                port = p
+                host = String(host[..<colonIdx])
+            }
+        }
+        return (host, port, sh)
+    }
 
     private func session(_ call: CAPPluginCall) -> SMB2Manager? {
         guard let id = call.getString("id") else { call.reject("Missing id"); return nil }
@@ -68,27 +197,76 @@ public class SmbPlugin: CAPPlugin, CAPBridgedPlugin {
         try await m.removeItem(atPath: path)
     }
 
+    // MARK: - Auto-Discovery & Share Enumeration
+
+    @objc func discoverServers(_ call: CAPPluginCall) {
+        let timeout = call.getDouble("timeout") ?? 3.5
+        let discovery = SMBBonjourDiscovery()
+        self.activeDiscovery = discovery
+        discovery.discover(timeout: timeout) { [weak self] servers in
+            self?.activeDiscovery = nil
+            call.resolve(["servers": servers])
+        }
+    }
+
+    @objc func listShares(_ call: CAPPluginCall) {
+        guard let rawHost = call.getString("host"), !rawHost.isEmpty else {
+            call.reject("Missing host"); return
+        }
+
+        let parsed = parseHostAndShare(rawHost: rawHost, rawShare: nil)
+        let host = parsed.host
+        let port = call.getInt("port") ?? parsed.port
+
+        let user = call.getString("username") ?? "guest"
+        let pass = call.getString("password") ?? ""
+        let domain = call.getString("domain") ?? ""
+
+        var comps = URLComponents()
+        comps.scheme = "smb"
+        comps.host = host
+        if port > 0 && port != 445 { comps.port = port }
+        guard let url = comps.url else { call.reject("Invalid server address"); return }
+
+        let cred = URLCredential(user: user.isEmpty ? "guest" : user, password: pass, persistence: .forSession)
+        guard let manager = SMB2Manager(url: url, domain: domain, credential: cred) else {
+            call.reject("Could not create SMB client"); return
+        }
+
+        Task {
+            do {
+                let shares = try await manager.listShares(enumerateHidden: false)
+                let entries = shares.map { share -> [String: String] in
+                    return ["name": share.name, "comment": share.comment]
+                }
+                call.resolve(["shares": entries])
+            } catch {
+                call.reject(error.localizedDescription)
+            }
+        }
+    }
+
     // MARK: - Connection
 
     @objc func connect(_ call: CAPPluginCall) {
         guard let id = call.getString("id"),
-              let rawHost = call.getString("host"), !rawHost.isEmpty,
-              let share = call.getString("share"), !share.isEmpty else {
-            call.reject("Missing host or share"); return
+              let rawHost = call.getString("host"), !rawHost.isEmpty else {
+            call.reject("Missing host"); return
         }
 
-        var host = rawHost.trimmingCharacters(in: .whitespacesAndNewlines)
-        if host.lowercased().hasPrefix("smb://") {
-            host = String(host.dropFirst(6))
-        }
-        if host.hasSuffix("/") {
-            host = String(host.dropLast())
+        let rawShare = call.getString("share")
+        let parsed = parseHostAndShare(rawHost: rawHost, rawShare: rawShare)
+        let host = parsed.host
+        let share = parsed.share
+        let port = call.getInt("port") ?? parsed.port
+
+        guard !share.isEmpty else {
+            call.reject("Missing share name"); return
         }
 
         let user = call.getString("username") ?? "guest"
         let pass = call.getString("password") ?? ""
         let domain = call.getString("domain") ?? ""
-        let port = call.getInt("port") ?? 0
 
         var comps = URLComponents()
         comps.scheme = "smb"
