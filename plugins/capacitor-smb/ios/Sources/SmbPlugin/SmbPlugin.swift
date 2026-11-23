@@ -36,6 +36,12 @@ public class SmbPlugin: CAPPlugin, CAPBridgedPlugin {
         return m
     }
 
+    private func storeSession(_ manager: SMB2Manager, for id: String) {
+        lock.lock()
+        sessions[id] = manager
+        lock.unlock()
+    }
+
     private func attrs(_ a: [URLResourceKey: Any], name: String? = nil) -> [String: Any] {
         let type = a[.fileResourceTypeKey] as? URLFileResourceType
         var out: [String: Any] = [
@@ -98,9 +104,7 @@ public class SmbPlugin: CAPPlugin, CAPBridgedPlugin {
         Task {
             do {
                 try await manager.connectShare(name: share)
-                self.lock.lock()
-                self.sessions[id] = manager
-                self.lock.unlock()
+                self.storeSession(manager, for: id)
                 call.resolve()
             } catch {
                 call.reject(error.localizedDescription)
@@ -223,7 +227,7 @@ public class SmbPlugin: CAPPlugin, CAPBridgedPlugin {
         Task {
             defer { try? FileManager.default.removeItem(at: url) }
             do {
-                try await m.uploadItem(at: url, toPath: path)
+                try await m.uploadItem(at: url, toPath: path, progress: nil)
                 call.resolve()
             } catch {
                 call.reject(error.localizedDescription)
