@@ -17,8 +17,22 @@ let isEditMode = false;
 let appBeingRenamedId = null;
 let targetAppForIcon = null;
 
-// Native BLE Bridge Initializer
-window.BluetoothLe = window.Capacitor?.Plugins?.BluetoothLe || null;
+// Native Capacitor Bridges
+export function syncNativePlugins() {
+  if (window.Capacitor?.Plugins) {
+    if (window.Capacitor.Plugins.BluetoothLe) {
+      window.BluetoothLe = window.Capacitor.Plugins.BluetoothLe;
+    }
+    if (window.Capacitor.Plugins.Smb) {
+      window.Smb = window.Capacitor.Plugins.Smb;
+    }
+  } else {
+    window.BluetoothLe = window.BluetoothLe || null;
+    window.Smb = window.Smb || null;
+  }
+}
+
+syncNativePlugins();
 
 export function showToast(msg) {
   const toast = document.getElementById('toast');
@@ -69,7 +83,6 @@ async function handleIconPicked(event) {
   const reader = new FileReader();
   reader.onload = async (e) => {
     const rawSvg = e.target.result;
-    // Encode to Data URL so it is clean, immutable and safely displayed in <img>
     const base64Svg = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(rawSvg)))}`;
 
     const target = apps.find(a => String(a.id) === String(targetAppForIcon));
@@ -105,7 +118,6 @@ export function renderLauncher() {
     tile.onclick = (e) => {
       if (e.target.closest('.edit-action-btn')) return;
       if (isEditMode) {
-        // Tapping squircle directly in edit mode also triggers the SVG picker!
         openIconPickerForApp(app.id);
         return;
       }
@@ -115,7 +127,6 @@ export function renderLauncher() {
     const fileCount = app.files ? Object.keys(app.files).length : 1;
     const isMultiFile = fileCount > 1;
 
-    // Render either the custom SVG or the fallback initial letter
     const iconGraphic = app.icon
       ? `<img src="${app.icon}" style="width:62%; height:62%; object-fit:contain; pointer-events:none;" alt="icon" />`
       : `<span style="font-size:1.6rem; font-weight:700; letter-spacing:-0.03em;">${escapeHtml(app.name.charAt(0).toUpperCase())}</span>`;
@@ -131,7 +142,7 @@ export function renderLauncher() {
           </div>
         ` : ''}
         ${isEditMode ? `
-          <!-- Delete Button (Top-Right) -->
+          <!-- Delete Button -->
           <button type="button" data-delete-id="${appIdStr}" class="edit-action-btn" title="Delete App" style="position:absolute; top:-6px; right:-6px; width:22px; height:22px; border-radius:9999px; background:#FF453A; color:white; display:flex; align-items:center; justify-content:center; border:2px solid #090a10; z-index:30; cursor:pointer;">
             <svg style="width:12px; height:12px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -139,7 +150,7 @@ export function renderLauncher() {
             </svg>
           </button>
 
-          <!-- Rename Button (Top-Left) -->
+          <!-- Rename Button -->
           <button type="button" data-rename-id="${appIdStr}" class="edit-action-btn" title="Rename App" style="position:absolute; top:-6px; left:-6px; width:22px; height:22px; border-radius:9999px; background:#0A84FF; color:white; display:flex; align-items:center; justify-content:center; border:2px solid #090a10; z-index:30; cursor:pointer;">
             <svg style="width:11px; height:11px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -147,7 +158,7 @@ export function renderLauncher() {
             </svg>
           </button>
 
-          <!-- Export Single HTML (Bottom-Right) -->
+          <!-- Export Single HTML -->
           <button type="button" data-export-id="${appIdStr}" class="edit-action-btn" title="Export HTML File" style="position:absolute; bottom:-6px; right:-6px; width:22px; height:22px; border-radius:9999px; background:#30D158; color:white; display:flex; align-items:center; justify-content:center; border:2px solid #090a10; z-index:30; cursor:pointer;">
             <svg style="width:11px; height:11px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -156,7 +167,7 @@ export function renderLauncher() {
             </svg>
           </button>
 
-          <!-- Change SVG Icon Button (Bottom-Left) -->
+          <!-- Change SVG Icon Button -->
           <button type="button" data-icon-id="${appIdStr}" class="edit-action-btn" title="Change SVG Icon" style="position:absolute; bottom:-6px; left:-6px; width:22px; height:22px; border-radius:9999px; background:#A855F7; color:white; display:flex; align-items:center; justify-content:center; border:2px solid #090a10; z-index:30; cursor:pointer;">
             <svg style="width:11px; height:11px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
@@ -167,7 +178,6 @@ export function renderLauncher() {
       <span style="margin-top:8px; font-size:12px; font-weight:600; color:rgba(255,255,255,0.9); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:80px; text-align:center; pointer-events:none;">${escapeHtml(app.name)}</span>
     `;
 
-    // Event Delegation bindings on Edit Actions
     tile.querySelectorAll('[data-delete-id]').forEach(b => b.onclick = (e) => removeApp(e, app.id));
     tile.querySelectorAll('[data-rename-id]').forEach(b => b.onclick = (e) => promptRenameApp(e, app.id));
     tile.querySelectorAll('[data-export-id]').forEach(b => b.onclick = (e) => exportSingleApp(e, app.id));
@@ -378,9 +388,12 @@ function handleBackupSelected(event) {
 // =========================================================================
 window.addEventListener('DOMContentLoaded', async () => {
   initLogger();
+  syncNativePlugins();
   setupFloatingMenu();
   await initDatabase();
   await refreshApps();
+
+  recordLog('SMB_STATUS', window.Smb ? 'Native SMB plugin detected and ready.' : 'Native SMB plugin not available (in-browser or not compiled into host).');
 
   // Top Nav Buttons
   document.getElementById('btn-download-logs').onclick = downloadAppLogs;

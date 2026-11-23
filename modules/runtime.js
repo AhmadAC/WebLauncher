@@ -42,8 +42,19 @@ export function assembleAndLoadApp(app) {
       if (!window.Capacitor && window.parent && window.parent.Capacitor) {
         window.Capacitor = window.parent.Capacitor;
       }
-      if (!window.BluetoothLe && window.parent && window.parent.BluetoothLe) {
-        window.BluetoothLe = window.parent.BluetoothLe;
+      if (window.Capacitor && window.parent && window.parent.Capacitor && window.parent.Capacitor.Plugins) {
+        window.Capacitor.Plugins = window.Capacitor.Plugins || {};
+        for (const [pluginName, pluginInstance] of Object.entries(window.parent.Capacitor.Plugins)) {
+          if (!window.Capacitor.Plugins[pluginName]) {
+            window.Capacitor.Plugins[pluginName] = pluginInstance;
+          }
+        }
+      }
+      if (!window.BluetoothLe && window.parent) {
+        window.BluetoothLe = window.parent.BluetoothLe || window.parent.Capacitor?.Plugins?.BluetoothLe || null;
+      }
+      if (!window.Smb && window.parent) {
+        window.Smb = window.parent.Smb || window.parent.Capacitor?.Plugins?.Smb || null;
       }
       if (window.parent && window.parent.recordChildLog) {
         window.recordChildLog = window.parent.recordChildLog;

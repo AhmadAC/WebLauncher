@@ -18,7 +18,6 @@ jobs:
 
       # Step 2: Set up Node.js
       - name: Set up Node.js
-        uses: actions/setup-node@v4
         with:
           node-version: 20
 
@@ -31,6 +30,11 @@ jobs:
 
           # Install Capacitor 6 and Bluetooth LE plugin
           npm install @capacitor/core@^6.0.0 @capacitor/cli@^6.0.0 @capacitor/ios@^6.0.0 @capacitor-community/bluetooth-le@^6.0.0
+
+          # Native SMB plugin (Swift + AMSMB2) used by companion apps like OpenFiles
+          if [ -d plugins/capacitor-smb ]; then
+            npm install ./plugins/capacitor-smb
+          fi
 
           # Create www directory and copy web files cleanly
           mkdir -p www
@@ -61,8 +65,12 @@ jobs:
           if [ -f ios/App/App/Info.plist ]; then
             /usr/libexec/PlistBuddy -c "Add :NSBluetoothAlwaysUsageDescription string 'WebLauncher connects to and controls ESP32 and BLE peripherals.'" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSBluetoothAlwaysUsageDescription 'WebLauncher connects to and controls ESP32 and BLE peripherals.'" ios/App/App/Info.plist
             /usr/libexec/PlistBuddy -c "Add :NSBluetoothPeripheralUsageDescription string 'WebLauncher communicates with nearby ESP32 devices.'" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSBluetoothPeripheralUsageDescription 'WebLauncher communicates with nearby ESP32 devices.'" ios/App/App/Info.plist
-            /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string 'WebLauncher discovers and communicates with companion apps on your local Wi-Fi network.'" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSLocalNetworkUsageDescription 'WebLauncher discovers and communicates with companion apps on your local Wi-Fi network.'" ios/App/App/Info.plist
+            /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string 'WebLauncher discovers and communicates with companion apps and SMB shares on your local Wi-Fi network.'" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSLocalNetworkUsageDescription 'WebLauncher discovers and communicates with companion apps and SMB shares on your local Wi-Fi network.'" ios/App/App/Info.plist
             /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'WebLauncher uses the camera when launched apps scan QR codes.'" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'WebLauncher uses the camera when launched apps scan QR codes.'" ios/App/App/Info.plist
+
+            # Bonjour service discovery for local SMB shares
+            /usr/libexec/PlistBuddy -c "Add :NSBonjourServices array" ios/App/App/Info.plist || true
+            /usr/libexec/PlistBuddy -c "Add :NSBonjourServices:0 string _smb._tcp" ios/App/App/Info.plist || true
 
             # Allow plain HTTP / WS connections on local Wi-Fi inside WKWebView
             /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" ios/App/App/Info.plist || true
@@ -85,6 +93,11 @@ jobs:
 
           # Sync capacitor plugins and native code
           npx cap sync ios
+
+          # Make sure the SMB plugin class is registered with the Capacitor bridge
+          if [ -d plugins/capacitor-smb ]; then
+            node -e "const fs=require('fs');const p='ios/App/App/capacitor.config.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));c.packageClassList=c.packageClassList||[];if(!c.packageClassList.includes('SmbPlugin')){c.packageClassList.push('SmbPlugin');fs.writeFileSync(p,JSON.stringify(c,null,2));console.log('SmbPlugin added to packageClassList manually')}else{console.log('SmbPlugin registered by cap sync')}"
+          fi
 
           # Run pod install with updated target
           cd ios/App
