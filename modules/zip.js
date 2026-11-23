@@ -19,13 +19,19 @@ export function getMimeType(filename) {
     'wav': 'audio/wav',
     'mp3': 'audio/mpeg',
     'ogg': 'audio/ogg',
-    'txt': 'text/plain'
+    'txt': 'text/plain',
+    'md': 'text/markdown',
+    'ico': 'image/x-icon',
+    'wasm': 'application/wasm'
   };
   return types[ext] || 'application/octet-stream';
 }
 
 export function isTextFile(mime) {
-  return mime.startsWith('text/') || mime === 'application/javascript' || mime === 'application/json' || mime === 'image/svg+xml';
+  return mime.startsWith('text/') || 
+         mime === 'application/javascript' || 
+         mime === 'application/json' || 
+         mime === 'image/svg+xml';
 }
 
 export function normalizeFileTree(files) {
@@ -55,8 +61,11 @@ export async function readFileContent(file) {
       reader.onload = (e) => {
         const bytes = new Uint8Array(e.target.result);
         let binaryStr = '';
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binaryStr += String.fromCharCode(bytes[i]);
+        const len = bytes.byteLength;
+        const chunkSize = 8192;
+        for (let i = 0; i < len; i += chunkSize) {
+          const chunk = bytes.subarray(i, Math.min(i + chunkSize, len));
+          binaryStr += String.fromCharCode.apply(null, chunk);
         }
         resolve({ content: btoa(binaryStr), isBinary: true, type: mime });
       };
@@ -142,8 +151,11 @@ export async function parseZipBuffer(arrayBuffer) {
       };
     } else {
       let binaryStr = '';
-      for (let b = 0; b < decompressedBytes.byteLength; b++) {
-        binaryStr += String.fromCharCode(decompressedBytes[b]);
+      const len = decompressedBytes.byteLength;
+      const chunkSize = 8192;
+      for (let b = 0; b < len; b += chunkSize) {
+        const chunk = decompressedBytes.subarray(b, Math.min(b + chunkSize, len));
+        binaryStr += String.fromCharCode.apply(null, chunk);
       }
       files[filename] = {
         content: btoa(binaryStr),

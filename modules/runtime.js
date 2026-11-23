@@ -82,7 +82,7 @@ export function assembleAndLoadApp(app) {
     </style>
   `;
 
-  // Legacy / Standalone Single-File Mode
+  // Standalone Single-File Mode
   if (!app.files || Object.keys(app.files).length <= 1) {
     let code = app.code || (app.files && Object.values(app.files)[0]?.content) || '';
     if (code.includes('<head>')) {
@@ -94,7 +94,7 @@ export function assembleAndLoadApp(app) {
     return;
   }
 
-  // Multi-File Virtual Module Resolution
+  // Multi-File & WASM Virtual Module Resolution
   const blobMap = {};
   const importMap = { imports: {} };
 
@@ -111,50 +111,98 @@ export function assembleAndLoadApp(app) {
 
     const bUrl = URL.createObjectURL(blob);
     activeBlobUrls.push(bUrl);
-    blobMap[relPath] = bUrl;
-    blobMap['./' + relPath] = bUrl;
-    blobMap['/' + relPath] = bUrl;
 
-    if (relPath.endsWith('.js') || relPath.endsWith('.mjs')) {
-      importMap.imports[relPath] = bUrl;
-      importMap.imports['./' + relPath] = bUrl;
+    const cleanPath = relPath.replace(/^\.\//, '').replace(/^\//, '');
+    blobMap[cleanPath] = bUrl;
+    blobMap['./' + cleanPath] = bUrl;
+    blobMap['/' + cleanPath] = bUrl;
+
+    if (cleanPath.endsWith('.js') || cleanPath.endsWith('.mjs')) {
+      importMap.imports[cleanPath] = bUrl;
+      importMap.imports['./' + cleanPath] = bUrl;
+      importMap.imports['/' + cleanPath] = bUrl;
     }
   }
+
+  // Intercept fetch and WebAssembly.instantiateStreaming so Wasm and snippets load from blobMap
+  const wasmFetchInterceptor = `
+    <script id="wasm-fetch-interceptor">
+      (function() {
+        const vfs = ${JSON.stringify(blobMap)};
+        const origFetch = window.fetch;
+        window.fetch = function(resource, init) {
+          let url = typeof resource === 'string' ? resource : (resource && resource.url ? resource.url : '');
+          url = url.replace(window.location.origin, '').replace(/^about:srcdoc\\/?/, '').replace(/^\\.\\//, '').replace(/^\\//, '');
+          if (vfs[url]) {
+            return origFetch(vfs[url], init);
+          }
+          if (vfs['./' + url]) {
+            return origFetch(vfs['./' + url], init);
+          }
+          return origFetch(resource, init);
+        };
+
+        if (window.WebAssembly && window.WebAssembly.instantiateStreaming) {
+          const origInstantiateStreaming = window.WebAssembly.instantiateStreaming;
+          window.WebAssembly.instantiateStreaming = async function(respPromise, importObject) {
+            try {
+              const resp = await respPromise;
+              const source = await resp.arrayBuffer();
+              return await WebAssembly.instantiate(source, importObject);
+            } catch (err) {
+              return origInstantiateStreaming(respPromise, importObject);
+            }
+          };
+        }
+      })();
+    <\/script>
+  `;
 
   const importMapTag = `<script type="importmap">${JSON.stringify(importMap)}<\/script>`;
   const entryKey = app.entry || 'index.html';
   const entryFile = app.files[entryKey] || Object.values(app.files)[0];
   let html = entryFile.content || '';
 
-  // Inline CSS
+  // Inline / rewrite CSS
   html = html.replace(/<link[^>]+rel=["']stylesheet["'][^>]+href=["']([^"']+)["'][^>]*>/gi, (match, href) => {
-    const cleanHref = href.replace(/^\.\//, '');
+    const cleanHref = href.replace(/^\.\//, '').replace(/^\//, '');
     if (app.files[cleanHref] && !app.files[cleanHref].isBinary) {
       return `<style data-href="${cleanHref}">\n${app.files[cleanHref].content}\n</style>`;
-    } else if (blobMap[href]) {
-      return `<link rel="stylesheet" href="${blobMap[href]}">`;
+    } else if (blobMap[cleanHref]) {
+      return `<link rel="stylesheet" href="${blobMap[cleanHref]}">`;
+    }
+    return match;
+  });
+
+  // Rewrite Preload links (Trunk wasm-bindgen uses <link rel="preload" href="...wasm" as="fetch">)
+  html = html.replace(/<link([^>]+)href=["']([^"']+)["']([^>]*)>/gi, (match, pre, href, post) => {
+    const cleanHref = href.replace(/^\.\//, '').replace(/^\//, '');
+    if (blobMap[cleanHref]) {
+      return `<link${pre}href="${blobMap[cleanHref]}"${post}>`;
     }
     return match;
   });
 
   // Rewrite Script Sources
   html = html.replace(/<script([^>]+)src=["']([^"']+)["']([^>]*)><\/script>/gi, (match, pre, src, post) => {
-    if (blobMap[src]) {
-      return `<script${pre}src="${blobMap[src]}"${post}><\/script>`;
+    const cleanSrc = src.replace(/^\.\//, '').replace(/^\//, '');
+    if (blobMap[cleanSrc]) {
+      return `<script${pre}src="${blobMap[cleanSrc]}"${post}><\/script>`;
     }
     return match;
   });
 
-  // Rewrite Images, Audio and Media
+  // Rewrite Media (Images, Icons)
   html = html.replace(/\b(src|href)=["']([^"']+)["']/gi, (match, attr, val) => {
-    if (blobMap[val]) {
-      return `${attr}="${blobMap[val]}"`;
+    const cleanVal = val.replace(/^\.\//, '').replace(/^\//, '');
+    if (blobMap[cleanVal]) {
+      return `${attr}="${blobMap[cleanVal]}"`;
     }
     return match;
   });
 
-  // Inject Headers
-  const injections = `\n${importMapTag}\n${bridgeScript}\n${islandShield}\n`;
+  // Inject interceptor and bridges into head
+  const injections = `\n${importMapTag}\n${wasmFetchInterceptor}\n${bridgeScript}\n${islandShield}\n`;
   if (html.includes('<head>')) {
     html = html.replace('<head>', '<head>' + injections);
   } else {
@@ -193,7 +241,7 @@ export function getExportableCode(targetApp) {
   let html = entryFile.content || '';
 
   html = html.replace(/<link[^>]+rel=["']stylesheet["'][^>]+href=["']([^"']+)["'][^>]*>/gi, (match, href) => {
-    const cleanHref = href.replace(/^\.\//, '');
+    const cleanHref = href.replace(/^\.\//, '').replace(/^\//, '');
     if (targetApp.files[cleanHref] && !targetApp.files[cleanHref].isBinary) {
       return `<style data-source="${cleanHref}">\n${targetApp.files[cleanHref].content}\n</style>`;
     }
@@ -201,7 +249,7 @@ export function getExportableCode(targetApp) {
   });
 
   html = html.replace(/<script([^>]+)src=["']([^"']+)["']([^>]*)><\/script>/gi, (match, pre, src, post) => {
-    const cleanSrc = src.replace(/^\.\//, '');
+    const cleanSrc = src.replace(/^\.\//, '').replace(/^\//, '');
     if (targetApp.files[cleanSrc] && !targetApp.files[cleanSrc].isBinary && !pre.includes('type="module"')) {
       return `<script${pre}${post}>\n${targetApp.files[cleanSrc].content}\n<\/script>`;
     }
