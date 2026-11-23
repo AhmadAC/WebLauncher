@@ -170,6 +170,37 @@ jobs:
           xcodebuild -workspace App.xcworkspace -scheme App -derivedDataPath build -resolvePackageDependencies
           cd ../..
 
+      # Step 4b: Wire the native DeviceFiles plugin (Files-app folder access for OpenFiles)
+      - name: Wire DeviceFiles plugin
+        run: |
+          # Find DeviceFilesPlugin.swift wherever it was committed
+          DF_SRC=$(find plugins -name DeviceFilesPlugin.swift | head -1)
+          echo "DeviceFiles source: ${DF_SRC:-NOT FOUND}"
+          if [ -z "$DF_SRC" ]; then echo "::error::DeviceFilesPlugin.swift not found under plugins/"; exit 1; fi
+          if [ -n "$DF_SRC" ]; then
+            cp -f "$DF_SRC" ios/App/App/DeviceFilesPlugin.swift
+
+            ruby << 'RUBY'
+          require 'xcodeproj'
+          project = Xcodeproj::Project.open('ios/App/App.xcodeproj')
+          app_target = project.targets.find { |t| t.name == 'App' } || project.targets.first
+          app_group = project.main_group.find_subpath('App', true)
+          unless app_group.files.any? { |f| f.path == 'DeviceFilesPlugin.swift' }
+            app_target.add_file_references([app_group.new_file('DeviceFilesPlugin.swift')])
+          end
+          project.save
+          puts 'Wired DeviceFilesPlugin.swift into App.xcodeproj'
+          RUBY
+
+            node -e "const fs=require('fs');const p='ios/App/App/capacitor.config.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));c.packageClassList=c.packageClassList||[];if(!c.packageClassList.includes('DeviceFilesPlugin')){c.packageClassList.push('DeviceFilesPlugin');fs.writeFileSync(p,JSON.stringify(c,null,2));console.log('DeviceFilesPlugin added to packageClassList')}"
+
+            # Make the app's own Documents folder visible in the Files app, and allow opening in place
+            if [ -f ios/App/App/Info.plist ]; then
+              /usr/libexec/PlistBuddy -c "Add :UIFileSharingEnabled bool true" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :UIFileSharingEnabled true" ios/App/App/Info.plist
+              /usr/libexec/PlistBuddy -c "Add :LSSupportsOpeningDocumentsInPlace bool true" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :LSSupportsOpeningDocumentsInPlace true" ios/App/App/Info.plist
+            fi
+          fi
+
       # Step 5: Build Xcode Workspace (Unsigned for Sideloading)
       - name: Build Xcode Workspace
         run: |
