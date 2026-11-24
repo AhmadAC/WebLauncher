@@ -255,7 +255,7 @@ export function repairMissingImports(app) {
   const norm = (p) => p.replace(/^\.?\//, '');
   const have = new Set(Object.keys(files).map(k => norm(k).toLowerCase()));
   const names = Object.keys(files).map(norm);
-  let added = 0;
+  let added = 0, scanned = 0, imports = 0, jsList = [];
   const resolve = (base, rel) => {
     const parts = base.split('/'); parts.pop();
     for (const seg of rel.split('/')) {
@@ -267,10 +267,12 @@ export function repairMissingImports(app) {
   for (const key of Object.keys(files)) {
     const f = files[key];
     if (f.isBinary || !/\.(m?js)$/i.test(key) || typeof f.content !== 'string') continue;
+    scanned++;
     const re = /(?:\bfrom\s*|\bimport\s*\(?\s*|\bimport\s+)(['"])(\.{1,2}\/[^'"\n]+?\.(?:m?js))\1/g;
     let m;
     while ((m = re.exec(f.content))) {
       const target = resolve(norm(key), m[2]);
+      imports++; jsList.push(key + ' -> ' + target + (have.has(target.toLowerCase()) ? ' ok' : ' MISSING'));
       if (have.has(target.toLowerCase())) continue;
       const tail = m[2].replace(/^(\.{1,2}\/)+/, '').toLowerCase();
       const hits = names.filter(n => n.toLowerCase() === tail || n.toLowerCase().endsWith('/' + tail));
@@ -284,6 +286,7 @@ export function repairMissingImports(app) {
       }
     }
   }
+  recordLog('IMPORT_SCAN', `v2 js=${scanned} imports=${imports} repaired=${added} :: ` + jsList.join(' | ').slice(0, 1500));
   return added;
 }
 
