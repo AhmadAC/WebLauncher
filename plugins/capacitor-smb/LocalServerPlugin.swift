@@ -52,9 +52,14 @@ public class LocalServerPlugin: CAPPlugin, CAPBridgedPlugin {
     private let injectedScript = #"""
     <script>(function(){try{var P=window.parent;if(!P||P===window)return;
     function s(l,m){try{P.postMessage({__weblauncher:1,level:l,msg:String(m)},'*')}catch(e){}}
-    var oe=console.error;console.error=function(){s('APP_ERR',Array.prototype.map.call(arguments,String).join(' '));return oe.apply(console,arguments)};
+    function j(a){return Array.prototype.map.call(a,function(x){try{return typeof x==='string'?x:JSON.stringify(x)}catch(e){return String(x)}}).join(' ')}
+    var oe=console.error;console.error=function(){s('APP_ERR',j(arguments).slice(0,600));return oe.apply(console,arguments)};
+    var ow=console.warn;console.warn=function(){s('APP_WARN',j(arguments).slice(0,600));return ow.apply(console,arguments)};
+    var ol=console.log;console.log=function(){var m=j(arguments);if(/wgpu|webgpu|webgl|adapter|backend|gpu|craft/i.test(m))s('APP_LOG',m.slice(0,300));return ol.apply(console,arguments)};
     window.addEventListener('error',function(e){s('APP_FATAL',(e.message||'')+' @ '+(e.lineno||0))});
     window.addEventListener('unhandledrejection',function(e){s('APP_REJECT',(e.reason&&e.reason.message)||e.reason)});
+    var g2=null;try{g2=!!document.createElement('canvas').getContext('webgl2')}catch(e){}
+    s('APP_ENV',JSON.stringify({secure:window.isSecureContext,webgpu:!!navigator.gpu,webgl2:g2,deviceMemoryGB:navigator.deviceMemory||null,isolated:!!window.crossOriginIsolated,decompress:typeof DecompressionStream!=='undefined',ua:navigator.userAgent}));
     }catch(e){}})();</script>
     """#
 
