@@ -449,7 +449,7 @@ public class LocalServerPlugin: CAPPlugin, CAPBridgedPlugin {
         "html": "text/html; charset=utf-8", "htm": "text/html; charset=utf-8",
         "css": "text/css; charset=utf-8", "js": "text/javascript; charset=utf-8",
         "mjs": "text/javascript; charset=utf-8", "json": "application/json; charset=utf-8",
-        "map": "application/json; charset=utf-8", "wasm": "application/wasm",
+        "map": "application/json; charset=utf-8", "wasm": "application/wasm", "mobileconfig": "application/x-apple-aspen-config",
         "svg": "image/svg+xml", "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
         "gif": "image/gif", "webp": "image/webp", "ico": "image/x-icon", "avif": "image/avif",
         "wav": "audio/wav", "mp3": "audio/mpeg", "ogg": "audio/ogg", "m4a": "audio/mp4",
