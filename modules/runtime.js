@@ -17,6 +17,142 @@ export function cleanupActiveBlobs() {
   }
 }
 
+// -------------------------------------------------------------------------
+// VIRTUAL LOCAL SERVER (service worker, see /sw.js)
+// -------------------------------------------------------------------------
+let vfsReady = null;
+
+export function registerVirtualServer() {
+  if (vfsReady) return vfsReady;
+  const secure = window.isSecureContext && /^https?:$/.test(location.protocol);
+  if (!navigator.serviceWorker || !secure) {
+    vfsReady = Promise.resolve(null);
+    return vfsReady;
+  }
+  vfsReady = navigator.serviceWorker
+    .register('sw.js')
+    .then(() => navigator.serviceWorker.ready)
+    .then((reg) => {
+      recordLog('VFS_READY', 'Virtual server active, scope: ' + reg.scope);
+      return reg;
+    })
+    .catch((err) => {
+      recordLog('VFS_ERR', 'Service worker registration failed: ' + (err && err.message || err));
+      return null;
+    });
+  return vfsReady;
+}
+
+async function tryLaunchViaVirtualServer(app, iframe) {
+  const reg = await registerVirtualServer();
+  if (!reg || !reg.active) return false;
+  // Wait until this page is controlled so the first iframe request is intercepted reliably
+  reg.active.postMessage({ type: 'vfs-clear', id: String(app.id) });
+
+  const entry = (app.entry || 'index.html').replace(/^\.?\//, '');
+  const base = new URL('__vfs__/' + encodeURIComponent(String(app.id)) + '/', reg.scope);
+  const url = base.href + entry.split('/').map(encodeURIComponent).join('/');
+
+  // Probe first: if the worker is not answering yet, fall back instead of showing a blank frame
+  try {
+    const probe = await fetch(url, { cache: 'no-store' });
+    if (!probe.ok) throw new Error('HTTP ' + probe.status);
+  } catch (err) {
+    recordLog('VFS_ERR', 'Probe failed for ' + url + ': ' + (err && err.message || err));
+    return false;
+  }
+  iframe.removeAttribute('srcdoc');
+  iframe.src = url;
+  recordLog('VFS_LAUNCH', 'Serving ' + app.name + ' from ' + url);
+  return true;
+}
+
+// -------------------------------------------------------------------------
+// NATIVE LOCAL SERVER (iOS app: plugins/capacitor-smb/LocalServerPlugin.swift)
+// WKWebView has no service workers, so the iOS app serves imported apps from a
+// loopback HTTP server written in Swift and loads them from http://127.0.0.1:<port>/
+// -------------------------------------------------------------------------
+function getNativeServer() {
+  const cap = window.Capacitor;
+  const isNative = cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform();
+  return isNative && cap.Plugins && cap.Plugins.LocalServer ? cap.Plugins.LocalServer : null;
+}
+
+// Apps that need a real http origin (wasm, ES modules, workers). Override per app with app.useServer = true/false.
+function needsRealServer(app) {
+  if (app.useServer === true) return true;
+  if (app.useServer === false) return false;
+  const names = Object.keys(app.files || {});
+  if (names.some(n => /\.(wasm|mjs)$/i.test(n))) return true;
+  const entry = app.files[app.entry || 'index.html'];
+  const html = entry && !entry.isBinary ? entry.content || '' : '';
+  return /type\s*=\s*["']module["']/i.test(html) || /new\s+Worker\s*\(/i.test(html);
+}
+
+function bytesToBase64(bytes) {
+  let s = '';
+  const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) {
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  }
+  return btoa(s);
+}
+
+async function writeFileToNative(LS, id, path, fileObj) {
+  if (fileObj.isBinary) {
+    const b64 = fileObj.content || '';
+    const CH = 1048576; // chars, multiple of 4 so every chunk decodes on its own
+    if (!b64.length) { await LS.writeFile({ id, path, data: '', append: false }); return; }
+    for (let off = 0; off < b64.length; off += CH) {
+      await LS.writeFile({ id, path, data: b64.slice(off, off + CH), append: off > 0 });
+    }
+  } else {
+    const bytes = new TextEncoder().encode(fileObj.content || '');
+    const CH = 786432; // bytes, multiple of 3
+    if (!bytes.length) { await LS.writeFile({ id, path, data: '', append: false }); return; }
+    for (let off = 0; off < bytes.length; off += CH) {
+      await LS.writeFile({ id, path, data: bytesToBase64(bytes.subarray(off, off + CH)), append: off > 0 });
+    }
+  }
+}
+
+async function tryLaunchViaNativeServer(app, iframe, showToast) {
+  const LS = getNativeServer();
+  if (!LS) return false;
+  try {
+    const id = String(app.id).replace(/[^A-Za-z0-9_-]/g, '_');
+    const { port } = await LS.start();
+    const version = String(app.timestamp || app.id) + ':' + Object.keys(app.files).length;
+    let have = {};
+    try { have = await LS.getVersion({ id }); } catch (e) {}
+    if (have.version !== version) {
+      if (showToast) showToast('Preparing app files...');
+      await LS.clearApp({ id });
+      for (const [rel, f] of Object.entries(app.files)) {
+        await writeFileToNative(LS, id, rel.replace(/^\.?\//, ''), f);
+      }
+      await LS.finish({ id, version });
+    }
+    const entry = (app.entry || 'index.html').replace(/^\.?\//, '');
+    const url = `http://127.0.0.1:${port}/${id}/` + entry.split('/').map(encodeURIComponent).join('/');
+    iframe.removeAttribute('srcdoc');
+    iframe.src = url;
+    recordLog('NATIVE_SRV_LAUNCH', 'Serving ' + app.name + ' from ' + url);
+    return true;
+  } catch (err) {
+    recordLog('NATIVE_SRV_ERR', (err && err.message) || String(err));
+    return false;
+  }
+}
+
+// Errors from apps served by the native server arrive as postMessage (different origin than the launcher)
+window.addEventListener('message', (ev) => {
+  const d = ev.data;
+  if (!d || !d.__weblauncher) return;
+  const f = document.getElementById('runtime-iframe');
+  if (f && ev.source === f.contentWindow) recordLog(String(d.level || 'APP'), String(d.msg || ''));
+});
+
 export function launchApp(app, showToast, collapseFloatingMenu) {
   if (!app || (!app.code && !app.files)) {
     showToast("App files are empty.");
@@ -29,13 +165,39 @@ export function launchApp(app, showToast, collapseFloatingMenu) {
   collapseFloatingMenu();
 
   modal.style.display = 'flex';
-  assembleAndLoadApp(app);
+  assembleAndLoadApp(app, showToast);
 }
 
-export function assembleAndLoadApp(app) {
+export function assembleAndLoadApp(app, showToast) {
   cleanupActiveBlobs();
   const iframe = document.getElementById('runtime-iframe');
   iframe.removeAttribute('src');
+
+  // Multi-file apps (zips, folders, WebAssembly) run on the virtual local server when available
+  if (app.files && Object.keys(app.files).length > 1) {
+    const token = Symbol('launch');
+    assembleAndLoadApp.token = token;
+    (async () => {
+      let ok = false;
+      if (needsRealServer(app)) ok = await tryLaunchViaNativeServer(app, iframe, showToast);
+      if (!ok) ok = await tryLaunchViaVirtualServer(app, iframe);
+      if (assembleAndLoadApp.token !== token) {   // user exited / relaunched meanwhile
+        if (ok) iframe.src = 'about:blank';
+        return;
+      }
+      if (ok) return;
+      if (showToast) {
+        showToast('No local server available here - using basic mode (some apps may not run).');
+      }
+      assembleBundledApp(app, iframe);
+    })();
+    return;
+  }
+  assembleBundledApp(app, iframe);
+}
+
+// Fallback: single file apps, or when service workers are unavailable (file://, iOS WebView)
+function assembleBundledApp(app, iframe) {
 
   const bridgeScript = `
     <script id="native-runtime-bridge">
@@ -215,6 +377,7 @@ export function assembleAndLoadApp(app) {
 export function exitApp() {
   const modal = document.getElementById('runtime-modal');
   const iframe = document.getElementById('runtime-iframe');
+  assembleAndLoadApp.token = null;
   modal.style.display = 'none';
   iframe.srcdoc = '';
   iframe.src = 'about:blank';
@@ -225,7 +388,7 @@ export function exitApp() {
 
 export function reloadApp(showToast) {
   if (currentRunningApp) {
-    assembleAndLoadApp(currentRunningApp);
+    assembleAndLoadApp(currentRunningApp, showToast);
     showToast("App reloaded");
     recordLog('APP_RELOAD', `Reloaded: ${currentRunningApp.name}`);
   }
