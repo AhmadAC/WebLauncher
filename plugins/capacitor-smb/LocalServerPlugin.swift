@@ -315,10 +315,16 @@ public class LocalServerPlugin: CAPPlugin, CAPBridgedPlugin {
             return sendError(conn, 404, "Not Found")
         }
 
-        serve(conn, file: file, head: method == "HEAD", rangeHeader: headers["range"])
+        serve(conn, file: file, head: method == "HEAD", rangeHeader: headers["range"], origin: headers["origin"])
     }
 
-    private func serve(_ conn: NWConnection, file: URL, head: Bool, rangeHeader: String?) {
+    /// Only the launcher's own origin may read responses with fetch() (used for the launch self-test).
+    private func corsFields(_ origin: String?) -> [(String, String)] {
+        guard let o = origin, o == "capacitor://localhost" || o == "ionic://localhost" || o == "http://localhost" else { return [] }
+        return [("Access-Control-Allow-Origin", o), ("Vary", "Origin")]
+    }
+
+    private func serve(_ conn: NWConnection, file: URL, head: Bool, rangeHeader: String?, origin: String? = nil) {
         let ext = file.pathExtension.lowercased()
         let mime = LocalServerPlugin.mimeTypes[ext] ?? "application/octet-stream"
 
@@ -332,7 +338,7 @@ public class LocalServerPlugin: CAPPlugin, CAPBridgedPlugin {
                 html = injectedScript + html
             }
             let body = Data(html.utf8)
-            let h = headerData(200, "OK", [("Content-Type", mime), ("Content-Length", String(body.count)), ("Cache-Control", "no-store")])
+            let h = headerData(200, "OK", [("Content-Type", mime), ("Content-Length", String(body.count)), ("Cache-Control", "no-store")] + corsFields(origin))
             conn.send(content: h + (head ? Data() : body), completion: .contentProcessed({ [weak self] _ in self?.finish(conn) }))
             return
         }
@@ -355,6 +361,7 @@ public class LocalServerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         let length = size == 0 ? 0 : (end - start + 1)
         fields.append(("Content-Length", String(length)))
+        fields.append(contentsOf: corsFields(origin))
 
         let h = headerData(status, status == 206 ? "Partial Content" : "OK", fields)
         if head || length == 0 {
