@@ -200,6 +200,59 @@ window.addEventListener('message', (ev) => {
   if (f && ev.source === f.contentWindow) recordLog(String(d.level || 'APP'), String(d.msg || ''));
 });
 
+
+// -------------------------------------------------------------------------
+// NATIVE PLUGIN BRIDGE for apps on the native loopback server (cross-origin iframe, so they cannot reach
+// window.parent.Capacitor). The app posts {__wlcap:1, id, op:'call', plugin, method, args}; functions in args are
+// sent as {__cb:n} and called back with {__wlcb:1, cb:n, args}. Only allow-listed plugins are reachable.
+// -------------------------------------------------------------------------
+const BRIDGE_PLUGINS = ['BluetoothLe', 'TextToSpeech'];
+const bridgeHandles = new Map();
+let bridgeHandleSeq = 0;
+
+function bridgePlugin(name) {
+  const cap = window.Capacitor;
+  return (cap && cap.Plugins && cap.Plugins[name]) || window[name] || null;
+}
+
+window.addEventListener('message', async (ev) => {
+  const d = ev.data;
+  if (!d || !d.__wlcap) return;
+  const f = document.getElementById('runtime-iframe');
+  if (!f || ev.source !== f.contentWindow) return;
+  const reply = (m) => { try { ev.source.postMessage(Object.assign({ __wlcapr: 1, id: d.id }, m), '*'); } catch (e) {} };
+  try {
+    if (d.op === 'ping') {
+      const has = {};
+      for (const n of BRIDGE_PLUGINS) has[n] = !!bridgePlugin(n);
+      return reply({ ok: true, has });
+    }
+    if (d.op === 'handleRemove') {
+      const h = bridgeHandles.get(d.handle);
+      bridgeHandles.delete(d.handle);
+      if (h && typeof h.remove === 'function') await h.remove();
+      return reply({ ok: true });
+    }
+    if (d.op === 'call') {
+      if (!BRIDGE_PLUGINS.includes(d.plugin)) return reply({ error: 'plugin not allowed: ' + d.plugin });
+      const plugin = bridgePlugin(d.plugin);
+      if (!plugin || typeof plugin[d.method] !== 'function') return reply({ error: 'no such method: ' + d.plugin + '.' + d.method });
+      const args = (d.args || []).map(a => (a && typeof a === 'object' && a.__cb != null)
+        ? (...cbArgs) => { try { ev.source.postMessage({ __wlcb: 1, cb: a.__cb, args: cbArgs }, '*'); } catch (e) {} }
+        : a);
+      let res = await plugin[d.method](...args);
+      if (res && typeof res === 'object' && typeof res.remove === 'function') {
+        const hid = ++bridgeHandleSeq;
+        bridgeHandles.set(hid, res);
+        res = { __handle: hid };
+      }
+      return reply({ ok: true, result: res === undefined ? null : res });
+    }
+  } catch (e) {
+    reply({ error: (e && (e.message || e.errorMessage)) || String(e) });
+  }
+});
+
 // -------------------------------------------------------------------------
 // GRAPHICS MODE (query flag appended to the app URL: ?webgl forces WebGL2, ?cpu forces CPU drawing).
 // Used by the Rust/wgpu "Craft" web apps; harmless for other apps. Saved per app.
