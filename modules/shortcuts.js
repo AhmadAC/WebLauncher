@@ -27,7 +27,12 @@ export function setLcBundle(v) {
 // The exact LiveContainer parameters are unverified; the launcher also accepts the plain scheme.
 export function liveContainerUrl(id, bundle) {
   const b64 = btoa(shortcutUrl(id));
-  return 'livecontainer://livecontainer-launch?bundle-name=' + encodeURIComponent(bundle) + '&open-url=' + encodeURIComponent(b64);
+  const base = String(bundle).trim();
+  // Preferred: the user pastes LiveContainer's own "Copy Launch URL"; we append the shortcut link to it.
+  if (/^livecontainer:\/\//i.test(base)) {
+    return base + (base.includes('?') ? '&' : '?') + 'open-url=' + encodeURIComponent(b64);
+  }
+  return 'livecontainer://livecontainer-launch?bundle-name=' + encodeURIComponent(base) + '&open-url=' + encodeURIComponent(b64);
 }
 
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
