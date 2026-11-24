@@ -384,10 +384,30 @@
         <button type="button" id="btn-style-icon" class="style-btn">Change Icon</button>
         <button type="button" id="btn-style-reset" class="style-btn">Reset</button>
       </div>
+      <button type="button" id="btn-style-shortcut" class="style-btn" style="background:rgba(52,199,89,0.25);">Add to Home Screen</button>
       <div style="display:flex; gap:8px;">
         <button type="button" id="btn-style-all" class="style-btn">Apply to All</button>
         <button type="button" class="btn-close-modal style-btn" data-target="style-modal" style="background:#0A84FF;">Done</button>
       </div>
+    </div>
+  </div>
+
+  <!-- HOME SCREEN SHORTCUT MODAL -->
+  <div id="shortcut-modal" style="position:fixed; inset:0; z-index:65; display:none; background:rgba(0,0,0,0.75); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); align-items:center; justify-content:center; padding:16px;">
+    <div class="glass-panel no-scrollbar" style="width:100%; max-width:360px; max-height:calc(100vh - 32px); overflow-y:auto; border-radius:24px; padding:20px; display:flex; flex-direction:column; gap:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 id="shortcut-title" style="font-size:1rem; font-weight:700; color:white;">Add to Home Screen</h2>
+        <button type="button" class="btn-close-modal" data-target="shortcut-modal" style="background:rgba(255,255,255,0.1); border-radius:9999px; width:28px; height:28px; color:rgba(255,255,255,0.7); cursor:pointer;">&times;</button>
+      </div>
+      <div style="font-size:0.72rem; color:rgba(255,255,255,0.6); line-height:1.4;">Link that opens this app directly:</div>
+      <input id="shortcut-url" readonly style="width:100%; height:36px; padding:0 10px; border-radius:10px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white; font-size:12px; font-family:ui-monospace,Menlo,monospace;">
+      <button type="button" id="btn-sc-copy" class="style-btn">Copy link</button>
+      <button type="button" id="btn-sc-profile" class="style-btn" style="background:#0A84FF;">Create home-screen icon (profile)</button>
+      <div style="font-size:0.72rem; color:rgba(255,255,255,0.6); line-height:1.4;">Using LiveContainer? Enter the launcher's bundle name to get a LiveContainer link for the Shortcuts app (Open URL):</div>
+      <input id="shortcut-lc" placeholder="LiveContainer bundle name" autocapitalize="off" autocomplete="off" spellcheck="false" style="width:100%; height:36px; padding:0 10px; border-radius:10px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white; font-size:16px;">
+      <button type="button" id="btn-sc-lc" class="style-btn">Copy LiveContainer link</button>
+      <button type="button" id="btn-sc-test" class="style-btn">Test link now</button>
+      <div id="shortcut-help" style="font-size:0.68rem; color:rgba(255,255,255,0.5); line-height:1.45;">Shortcuts app: New Shortcut &rarr; Open URLs &rarr; paste link &rarr; Add to Home Screen.</div>
     </div>
   </div>
 
