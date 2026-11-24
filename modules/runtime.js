@@ -117,6 +117,51 @@ async function writeFileToNative(LS, id, path, fileObj) {
   }
 }
 
+// Launch diagnostics for the native server: what is stored, what the page asks for, what the server returns.
+function b64Len(b64) {
+  const pad = b64.endsWith('==') ? 2 : (b64.endsWith('=') ? 1 : 0);
+  return Math.floor(b64.length * 3 / 4) - pad;
+}
+
+async function selfTestNativeApp(app, base) {
+  try {
+    const names = Object.keys(app.files);
+    recordLog('NATIVE_FILES', (names.length + ' files: ' + names.map(n => {
+      const f = app.files[n];
+      return n + '(' + (f.isBinary ? b64Len(f.content || '') : new TextEncoder().encode(f.content || '').length) + ')';
+    }).join(', ')).slice(0, 1800));
+
+    const entry = app.files[app.entry || 'index.html'];
+    if (entry && !entry.isBinary) {
+      const tags = (entry.content.match(/<(script|link)\b[^>]*>/gi) || []).map(t => t.replace(/integrity="[^"]*"/i, 'integrity=..')).join(' ');
+      const inline = (entry.content.match(/<script[^>]*>([\s\S]*?)<\/script>/i) || [])[1] || '';
+      recordLog('NATIVE_HTML', (tags + ' | inline: ' + inline.trim().replace(/\s+/g, ' ')).slice(0, 1500));
+    }
+
+    const bad = [];
+    for (const rel of names.slice(0, 60)) {
+      const clean = rel.replace(/^\.?\//, '');
+      const f = app.files[rel];
+      const expected = f.isBinary ? b64Len(f.content || '') : new TextEncoder().encode(f.content || '').length;
+      let status = '', len = -1, type = '';
+      try {
+        const r = await fetch(base + clean.split('/').map(encodeURIComponent).join('/'), { method: 'HEAD' });
+        status = r.status;
+        type = r.headers.get('content-type') || '';
+        len = Number(r.headers.get('content-length') || -1);
+      } catch (e) { status = 'ERR ' + (e && e.message || e); }
+      const isHtml = /\.html?$/i.test(clean);
+      if (status !== 200 || (!isHtml && len !== expected)) {
+        bad.push(clean + ' http=' + status + ' type=' + type + ' served=' + len + ' expected=' + expected);
+      }
+    }
+    recordLog('NATIVE_SELFTEST', names.length + ' files checked, ' + bad.length + ' problem(s)');
+    bad.forEach(b => recordLog('NATIVE_SELFTEST_BAD', b));
+  } catch (e) {
+    recordLog('NATIVE_SELFTEST_ERR', String(e && e.message || e));
+  }
+}
+
 async function tryLaunchViaNativeServer(app, iframe, showToast) {
   const LS = getNativeServer();
   if (!LS) return false;
@@ -139,6 +184,7 @@ async function tryLaunchViaNativeServer(app, iframe, showToast) {
     iframe.removeAttribute('srcdoc');
     iframe.src = url;
     recordLog('NATIVE_SRV_LAUNCH', 'Serving ' + app.name + ' from ' + url);
+    selfTestNativeApp(app, `http://127.0.0.1:${port}/${id}/`);
     return true;
   } catch (err) {
     recordLog('NATIVE_SRV_ERR', (err && err.message) || String(err));
