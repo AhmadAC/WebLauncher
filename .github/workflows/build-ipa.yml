@@ -223,6 +223,34 @@ jobs:
 
           node -e "const fs=require('fs');const p='ios/App/App/capacitor.config.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));c.packageClassList=c.packageClassList||[];if(!c.packageClassList.includes('LocalServerPlugin')){c.packageClassList.push('LocalServerPlugin');fs.writeFileSync(p,JSON.stringify(c,null,2));console.log('LocalServerPlugin added to packageClassList')}"
 
+      - name: Wire LaunchLink plugin and URL scheme
+        run: |
+          LL_SRC=$(find plugins -name LaunchLinkPlugin.swift | head -1)
+          if [ -z "$LL_SRC" ]; then echo "::error::LaunchLinkPlugin.swift not found under plugins/"; exit 1; fi
+          cp -f "$LL_SRC" ios/App/App/LaunchLinkPlugin.swift
+
+          ruby << 'RUBY'
+          require 'xcodeproj'
+          project = Xcodeproj::Project.open('ios/App/App.xcodeproj')
+          app_target = project.targets.find { |t| t.name == 'App' } || project.targets.first
+          app_group = project.main_group.find_subpath('App', true)
+          unless app_group.files.any? { |f| f.path == 'LaunchLinkPlugin.swift' }
+            app_target.add_file_references([app_group.new_file('LaunchLinkPlugin.swift')])
+          end
+          project.save
+          RUBY
+
+          node -e "const fs=require('fs');const p='ios/App/App/capacitor.config.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));c.packageClassList=c.packageClassList||[];if(!c.packageClassList.includes('LaunchLinkPlugin')){c.packageClassList.push('LaunchLinkPlugin');fs.writeFileSync(p,JSON.stringify(c,null,2))}"
+
+          PB=/usr/libexec/PlistBuddy
+          PL=ios/App/App/Info.plist
+          $PB -c "Delete :CFBundleURLTypes" $PL 2>/dev/null || true
+          $PB -c "Add :CFBundleURLTypes array" $PL
+          $PB -c "Add :CFBundleURLTypes:0 dict" $PL
+          $PB -c "Add :CFBundleURLTypes:0:CFBundleURLName string com.weblauncher.link" $PL
+          $PB -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" $PL
+          $PB -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string weblauncher" $PL
+
       # Step 5: Build Xcode Workspace (Unsigned for Sideloading)
       - name: Build Xcode Workspace
         run: |
