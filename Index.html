@@ -234,7 +234,7 @@
 
   <!-- FILE PICKERS -->
   <input type="file" id="folder-picker" webkitdirectory directory multiple style="display:none;">
-  <input type="file" id="multifile-picker" multiple accept=".html,.htm,.js,.mjs,.css,.json,.png,.jpg,.jpeg,.svg,.gif,.wav,.mp3,.zip" style="display:none;">
+  <input type="file" id="multifile-picker" multiple accept=".html,.htm,.js,.mjs,.css,.json,.png,.jpg,.jpeg,.svg,.gif,.wav,.mp3,.wasm,.zip" style="display:none;">
   <input type="file" id="zip-picker" accept=".zip,application/zip,application/x-zip-compressed" style="display:none;">
   <input type="file" id="single-picker" accept=".html,.htm,text/html,text/plain" style="display:none;">
   <input type="file" id="backup-picker" accept=".json,application/json,text/plain" style="display:none;">
@@ -493,6 +493,8 @@
             <path d="M16 21h5v-5"></path>
           </svg>
         </button>
+
+        <button type="button" id="btn-runtime-mode" style="height:34px; padding:0 10px; border-radius:10px; background:rgba(255,255,255,0.15); color:white; font-size:0.7rem; font-weight:600; display:flex; align-items:center; cursor:pointer; white-space:nowrap;" title="Graphics mode: Auto / WebGL / CPU (reloads the app)">GPU: Auto</button>
 
         <button type="button" id="btn-runtime-collapse" style="width:34px; height:34px; border-radius:10px; background:rgba(255,255,255,0.15); color:rgba(255,255,255,0.8); display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Collapse">
           <svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
