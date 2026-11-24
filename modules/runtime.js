@@ -2,6 +2,7 @@
 // RUNTIME ENGINE: VIRTUAL BUNDLER, CAPACITOR BRIDGE & EXPORT BUILDER
 // =========================================================================
 import { recordLog } from './logger.js';
+import { saveAppToDB } from './db.js';
 
 let activeBlobUrls = [];
 let currentRunningApp = null;
@@ -51,7 +52,7 @@ async function tryLaunchViaVirtualServer(app, iframe) {
 
   const entry = (app.entry || 'index.html').replace(/^\.?\//, '');
   const base = new URL('__vfs__/' + encodeURIComponent(String(app.id)) + '/', reg.scope);
-  const url = base.href + entry.split('/').map(encodeURIComponent).join('/');
+  const url = base.href + entry.split('/').map(encodeURIComponent).join('/') + (app.launchQuery || '');
 
   // Probe first: if the worker is not answering yet, fall back instead of showing a blank frame
   try {
@@ -134,7 +135,7 @@ async function tryLaunchViaNativeServer(app, iframe, showToast) {
       await LS.finish({ id, version });
     }
     const entry = (app.entry || 'index.html').replace(/^\.?\//, '');
-    const url = `http://127.0.0.1:${port}/${id}/` + entry.split('/').map(encodeURIComponent).join('/');
+    const url = `http://127.0.0.1:${port}/${id}/` + entry.split('/').map(encodeURIComponent).join('/') + (app.launchQuery || '');
     iframe.removeAttribute('srcdoc');
     iframe.src = url;
     recordLog('NATIVE_SRV_LAUNCH', 'Serving ' + app.name + ' from ' + url);
@@ -153,12 +154,44 @@ window.addEventListener('message', (ev) => {
   if (f && ev.source === f.contentWindow) recordLog(String(d.level || 'APP'), String(d.msg || ''));
 });
 
+// -------------------------------------------------------------------------
+// GRAPHICS MODE (query flag appended to the app URL: ?webgl forces WebGL2, ?cpu forces CPU drawing).
+// Used by the Rust/wgpu "Craft" web apps; harmless for other apps. Saved per app.
+// -------------------------------------------------------------------------
+const LAUNCH_MODES = [
+  { query: '', label: 'GPU: Auto' },
+  { query: '?webgl', label: 'GPU: WebGL' },
+  { query: '?cpu', label: 'GPU: CPU' }
+];
+
+function modeIndex(app) {
+  const i = LAUNCH_MODES.findIndex(m => m.query === (app && app.launchQuery || ''));
+  return i === -1 ? 0 : i;
+}
+
+export function updateModeButton() {
+  const btn = document.getElementById('btn-runtime-mode');
+  if (btn) btn.textContent = LAUNCH_MODES[modeIndex(currentRunningApp)].label;
+}
+
+export async function cycleLaunchMode(showToast) {
+  if (!currentRunningApp) return;
+  const next = LAUNCH_MODES[(modeIndex(currentRunningApp) + 1) % LAUNCH_MODES.length];
+  currentRunningApp.launchQuery = next.query;
+  try { await saveAppToDB(currentRunningApp); } catch (e) { recordLog('MODE_ERR', String(e)); }
+  recordLog('APP_MODE', `${currentRunningApp.name}: ${next.label}`);
+  updateModeButton();
+  if (showToast) showToast(next.label + ' - reloading');
+  assembleAndLoadApp(currentRunningApp, showToast);
+}
+
 export function launchApp(app, showToast, collapseFloatingMenu) {
   if (!app || (!app.code && !app.files)) {
     showToast("App files are empty.");
     return;
   }
   currentRunningApp = app;
+  updateModeButton();
   recordLog('APP_LAUNCH', `Launching: ${app.name} (ID: ${app.id})`);
 
   const modal = document.getElementById('runtime-modal');
