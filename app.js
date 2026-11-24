@@ -136,11 +136,6 @@ async function handleIconPicked(event) {
       target.icon = base64Svg;
       await saveAppToDB(target);
       await refreshApps();
-  listenForShortcuts((id) => {
-    const a = findApp(id);
-    if (a) launchApp(a, showToast, collapseFloatingMenu);
-    else showToast('Shortcut app not found');
-  });
       showToast(`Updated icon for "${target.name}"`);
       recordLog('ICON_UPDATED', `Custom SVG icon set for app: ${target.name} (${target.id})`);
     }
@@ -1106,6 +1101,11 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   await initDatabase();
   await refreshApps();
+  listenForShortcuts((id) => {
+    const a = findApp(id);
+    if (a) launchApp(a, showToast, collapseFloatingMenu);
+    else showToast('Shortcut app not found');
+  });
 
   recordLog('SMB_STATUS', window.Smb ? 'Native SMB plugin detected and ready.' : 'Native SMB plugin not available (in-browser or not compiled into host).');
 
