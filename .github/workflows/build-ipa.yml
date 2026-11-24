@@ -201,6 +201,28 @@ jobs:
             fi
           fi
 
+      # Step 4c: Wire the native LocalServer plugin (runs multi-file / WebAssembly apps on http://127.0.0.1)
+      - name: Wire LocalServer plugin
+        run: |
+          LS_SRC=$(find plugins -name LocalServerPlugin.swift | head -1)
+          echo "LocalServer source: ${LS_SRC:-NOT FOUND}"
+          if [ -z "$LS_SRC" ]; then echo "::error::LocalServerPlugin.swift not found under plugins/"; exit 1; fi
+          cp -f "$LS_SRC" ios/App/App/LocalServerPlugin.swift
+
+          ruby << 'RUBY'
+          require 'xcodeproj'
+          project = Xcodeproj::Project.open('ios/App/App.xcodeproj')
+          app_target = project.targets.find { |t| t.name == 'App' } || project.targets.first
+          app_group = project.main_group.find_subpath('App', true)
+          unless app_group.files.any? { |f| f.path == 'LocalServerPlugin.swift' }
+            app_target.add_file_references([app_group.new_file('LocalServerPlugin.swift')])
+          end
+          project.save
+          puts 'Wired LocalServerPlugin.swift into App.xcodeproj'
+          RUBY
+
+          node -e "const fs=require('fs');const p='ios/App/App/capacitor.config.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));c.packageClassList=c.packageClassList||[];if(!c.packageClassList.includes('LocalServerPlugin')){c.packageClassList.push('LocalServerPlugin');fs.writeFileSync(p,JSON.stringify(c,null,2));console.log('LocalServerPlugin added to packageClassList')}"
+
       # Step 5: Build Xcode Workspace (Unsigned for Sideloading)
       - name: Build Xcode Workspace
         run: |
