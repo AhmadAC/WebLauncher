@@ -4,7 +4,7 @@
 import { initLogger, recordLog, downloadAppLogs } from './modules/logger.js';
 import { initDatabase, loadAppsFromDB, saveAppToDB, saveAppsToDB, deleteAppFromDB, clearAllAppsFromDB } from './modules/db.js';
 import { readFileContent, parseZipBuffer, normalizeFileTree } from './modules/zip.js';
-import { launchApp, exitApp, reloadApp, getExportableCode } from './modules/runtime.js';
+import { launchApp, exitApp, reloadApp, getExportableCode, registerVirtualServer, cycleLaunchMode } from './modules/runtime.js';
 import { setupFloatingMenu, collapseFloatingMenu } from './modules/floatingMenu.js';
 
 // Gradient presets. The keys match the legacy CSS class names that older saved apps
@@ -65,6 +65,7 @@ export function syncNativePlugins() {
 }
 
 syncNativePlugins();
+registerVirtualServer();
 
 export function showToast(msg) {
   const toast = document.getElementById('toast');
@@ -1122,6 +1123,9 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   const btnReload = document.getElementById('btn-runtime-reload');
   if (btnReload) btnReload.onclick = () => reloadApp(showToast);
+
+  const btnMode = document.getElementById('btn-runtime-mode');
+  if (btnMode) btnMode.onclick = () => cycleLaunchMode(showToast);
 
   const btnCollapse = document.getElementById('btn-runtime-collapse');
   if (btnCollapse) btnCollapse.onclick = collapseFloatingMenu;
