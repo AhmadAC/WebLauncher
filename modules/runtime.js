@@ -247,6 +247,46 @@ export function launchApp(app, showToast, collapseFloatingMenu) {
   assembleAndLoadApp(app, showToast);
 }
 
+// Some web builds import files by a relative path that does not exist in the zip (e.g. app/photocraft-web.js
+// imports ./snippets/x/inline0.js while the file sits at snippets/x/inline0.js). For every missing relative
+// import of a JS/HTML file, add an alias copy from the unique file whose path ends with the same suffix.
+export function repairMissingImports(app) {
+  const files = app.files || {};
+  const norm = (p) => p.replace(/^\.?\//, '');
+  const have = new Set(Object.keys(files).map(k => norm(k).toLowerCase()));
+  const names = Object.keys(files).map(norm);
+  let added = 0;
+  const resolve = (base, rel) => {
+    const parts = base.split('/'); parts.pop();
+    for (const seg of rel.split('/')) {
+      if (seg === '.' || seg === '') continue;
+      if (seg === '..') parts.pop(); else parts.push(seg);
+    }
+    return parts.join('/');
+  };
+  for (const key of Object.keys(files)) {
+    const f = files[key];
+    if (f.isBinary || !/\.(m?js)$/i.test(key) || typeof f.content !== 'string') continue;
+    const re = /(?:\bfrom\s*|\bimport\s*\(?\s*|\bimport\s+)(['"])(\.{1,2}\/[^'"\n]+?\.(?:m?js))\1/g;
+    let m;
+    while ((m = re.exec(f.content))) {
+      const target = resolve(norm(key), m[2]);
+      if (have.has(target.toLowerCase())) continue;
+      const tail = m[2].replace(/^(\.{1,2}\/)+/, '').toLowerCase();
+      const hits = names.filter(n => n.toLowerCase() === tail || n.toLowerCase().endsWith('/' + tail));
+      if (hits.length === 1) {
+        files[target] = files[Object.keys(files).find(k => norm(k) === hits[0])];
+        have.add(target.toLowerCase());
+        added++;
+        recordLog('IMPORT_REPAIR', `${key}: ${m[2]} -> aliased ${target} from ${hits[0]}`);
+      } else {
+        recordLog('IMPORT_MISSING', `${key}: ${m[2]} not found (${hits.length} candidates)`);
+      }
+    }
+  }
+  return added;
+}
+
 export function assembleAndLoadApp(app, showToast) {
   cleanupActiveBlobs();
   const iframe = document.getElementById('runtime-iframe');
@@ -258,6 +298,7 @@ export function assembleAndLoadApp(app, showToast) {
     assembleAndLoadApp.token = token;
     (async () => {
       let ok = false;
+      try { if (repairMissingImports(app) > 0) await saveAppToDB(app); } catch (e) { recordLog('IMPORT_REPAIR_ERR', String(e)); }
       if (needsRealServer(app)) ok = await tryLaunchViaNativeServer(app, iframe, showToast);
       if (!ok) ok = await tryLaunchViaVirtualServer(app, iframe);
       if (assembleAndLoadApp.token !== token) {   // user exited / relaunched meanwhile
