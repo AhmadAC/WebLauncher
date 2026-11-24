@@ -5,6 +5,7 @@ import { initLogger, recordLog, downloadAppLogs } from './modules/logger.js';
 import { initDatabase, loadAppsFromDB, saveAppToDB, saveAppsToDB, deleteAppFromDB, clearAllAppsFromDB } from './modules/db.js';
 import { readFileContent, parseZipBuffer, normalizeFileTree } from './modules/zip.js';
 import { launchApp, exitApp, reloadApp, getExportableCode, registerVirtualServer, cycleLaunchMode } from './modules/runtime.js';
+import { shortcutUrl, liveContainerUrl, getLcBundle, setLcBundle, buildWebClip, renderIconPng, listenForShortcuts } from './modules/shortcuts.js';
 import { setupFloatingMenu, collapseFloatingMenu } from './modules/floatingMenu.js';
 
 // Gradient presets. The keys match the legacy CSS class names that older saved apps
@@ -135,6 +136,11 @@ async function handleIconPicked(event) {
       target.icon = base64Svg;
       await saveAppToDB(target);
       await refreshApps();
+  listenForShortcuts((id) => {
+    const a = findApp(id);
+    if (a) launchApp(a, showToast, collapseFloatingMenu);
+    else showToast('Shortcut app not found');
+  });
       showToast(`Updated icon for "${target.name}"`);
       recordLog('ICON_UPDATED', `Custom SVG icon set for app: ${target.name} (${target.id})`);
     }
@@ -601,6 +607,61 @@ async function applyStyleToAll() {
   showToast('Style applied to all apps');
 }
 
+// ---- Home-screen shortcuts ----
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return true; } catch (e) {}
+  const el = document.getElementById('shortcut-url');
+  try { el.value = t; el.select(); return document.execCommand('copy'); } catch (e) { return false; }
+}
+
+function openShortcutModal(id) {
+  const app = findApp(id);
+  if (!app) return;
+  const url = shortcutUrl(app.id);
+  const urlEl = document.getElementById('shortcut-url');
+  const lcEl = document.getElementById('shortcut-lc');
+  document.getElementById('shortcut-title').textContent = 'Add ' + app.name + ' to Home Screen';
+  urlEl.value = url;
+  lcEl.value = getLcBundle();
+  document.getElementById('btn-sc-copy').onclick = async () => showToast((await copyText(url)) ? 'Link copied' : 'Copy failed');
+  document.getElementById('btn-sc-lc').onclick = async () => {
+    const b = lcEl.value.trim();
+    if (!b) return showToast('Enter the bundle name first');
+    setLcBundle(b);
+    const lc = liveContainerUrl(app.id, b);
+    urlEl.value = lc;
+    showToast((await copyText(lc)) ? 'LiveContainer link copied' : 'Copy failed');
+  };
+  document.getElementById('btn-sc-test').onclick = () => {
+    const LL = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LaunchLink;
+    if (LL) LL.openExternal({ url }).catch(e => showToast('Open failed'));
+    else { closeModal('shortcut-modal'); launchApp(app, showToast, collapseFloatingMenu); }
+  };
+  document.getElementById('btn-sc-profile').onclick = async () => {
+    try {
+      const png = await renderIconPng(app);
+      const xml = buildWebClip(app, url, png);
+      const LS = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalServer;
+      const LL = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LaunchLink;
+      if (LS && LL) {
+        const { port } = await LS.start();
+        const bytes = new TextEncoder().encode(xml);
+        let bin = ''; for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        await LS.clearApp({ id: '__shortcuts__' });
+        await LS.writeFile({ id: '__shortcuts__', path: 'shortcut.mobileconfig', data: btoa(bin), append: false });
+        await LS.finish({ id: '__shortcuts__', version: String(Date.now()) });
+        await LL.openExternal({ url: 'http://127.0.0.1:' + port + '/__shortcuts__/shortcut.mobileconfig' });
+        showToast('Install in Settings > Profile Downloaded');
+      } else {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([xml], { type: 'application/x-apple-aspen-config' }));
+        a.download = app.name + '.mobileconfig'; a.click();
+      }
+    } catch (e) { recordLog('SHORTCUT_ERR', String(e)); showToast('Could not create profile'); }
+  };
+  openModal('shortcut-modal');
+}
+
 function initStyleModal() {
   const colorInput = document.getElementById('style-custom-color');
   const hexInput = document.getElementById('style-custom-hex');
@@ -638,6 +699,13 @@ function initStyleModal() {
 
   const btnAll = document.getElementById('btn-style-all');
   if (btnAll) btnAll.onclick = applyStyleToAll;
+
+  const btnSc = document.getElementById('btn-style-shortcut');
+  if (btnSc) btnSc.onclick = () => {
+    const id = styleTargetId;
+    closeModal('style-modal');
+    if (id != null) openShortcutModal(id);
+  };
 
   const btnIcon = document.getElementById('btn-style-icon');
   if (btnIcon) {
