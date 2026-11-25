@@ -2,7 +2,11 @@
 // MAIN CONTROLLER: COORDINATION, SVG ICON PICKER & UI BINDINGS
 // =========================================================================
 import { initLogger, recordLog, downloadAppLogs } from './modules/logger.js';
-import { initDatabase, loadAppsFromDB, saveAppToDB, saveAppsToDB, deleteAppFromDB, clearAllAppsFromDB } from './modules/db.js';
+import {
+  initDatabase, loadAppsFromDB, saveAppToDB, saveAppsToDB,
+  moveAppToTrash, moveAllAppsToTrash, loadTrashFromDB, restoreFromTrash,
+  deleteFromTrash, emptyTrash, purgeExpiredTrash, TRASH_RETENTION_MS
+} from './modules/db.js';
 import { readFileContent, parseZipBuffer, normalizeFileTree } from './modules/zip.js';
 import { launchApp, exitApp, reloadApp, getExportableCode, registerVirtualServer, cycleLaunchMode } from './modules/runtime.js';
 import { shortcutUrl, liveContainerUrl, getLcBundle, setLcBundle, buildWebClip, renderIconPng, listenForShortcuts } from './modules/shortcuts.js';
@@ -68,12 +72,40 @@ export function syncNativePlugins() {
 syncNativePlugins();
 registerVirtualServer();
 
+let toastTimer = null;
+
 export function showToast(msg) {
   const toast = document.getElementById('toast');
   if (!toast) return;
+  clearTimeout(toastTimer);
   toast.innerText = msg;
+  toast.style.whiteSpace = '';
   toast.style.display = 'block';
-  setTimeout(() => { toast.style.display = 'none'; }, 2400);
+  toastTimer = setTimeout(() => { toast.style.display = 'none'; }, 2400);
+}
+
+// Toast with an "Undo" button (stays up longer so there is time to tap it).
+export function showUndoToast(msg, onUndo, ms = 7000) {
+  const toast = document.getElementById('toast');
+  if (!toast) return;
+  clearTimeout(toastTimer);
+  toast.innerText = '';
+  const label = document.createElement('span');
+  label.textContent = msg;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = 'Undo';
+  btn.style.cssText = 'margin-left:12px; padding:3px 12px; border-radius:9999px; background:#0A84FF; color:white; font-size:12px; font-weight:700; cursor:pointer;';
+  btn.onclick = async () => {
+    clearTimeout(toastTimer);
+    toast.style.display = 'none';
+    try { await onUndo(); } catch (err) { showToast('Undo failed.'); }
+  };
+  toast.append(label, btn);
+  toast.style.display = 'flex';
+  toast.style.alignItems = 'center';
+  toast.style.whiteSpace = 'nowrap';
+  toastTimer = setTimeout(() => { toast.style.display = 'none'; }, ms);
 }
 
 export function openModal(id) {
@@ -946,9 +978,148 @@ async function finalizeMultiFileApp(appFiles, fallbackName) {
 
 async function removeApp(event, id) {
   event.stopPropagation();
-  await deleteAppFromDB(id);
+  const target = findApp(id);
+  const name = target ? target.name : 'App';
+  let trashId = null;
+  try {
+    trashId = await moveAppToTrash(id);
+  } catch (err) {
+    recordLog('TRASH_ERR', `Could not move "${name}" to trash: ${err}`);
+    return showToast("Could not delete app.");
+  }
   await refreshApps();
-  showToast("App deleted.");
+  await updateTrashBadge();
+  if (!trashId) return showToast("App not found.");
+  recordLog('APP_TRASHED', `Moved to trash: "${name}" (${id})`);
+  showUndoToast(`Deleted "${name}"`, async () => {
+    await restoreFromTrash(trashId);
+    await refreshApps();
+    await updateTrashBadge();
+    recordLog('APP_RESTORED', `Undo delete: "${name}" (${id})`);
+    showToast(`Restored "${name}"`);
+  });
+}
+
+// =========================================================================
+// TRASH: list, restore, delete forever, auto-clear after 10 days
+// =========================================================================
+const TRASH_DAYS = Math.round(TRASH_RETENTION_MS / 86400000);
+
+function daysLeft(trashedAt) {
+  const msLeft = (Number(trashedAt) || 0) + TRASH_RETENTION_MS - Date.now();
+  return Math.max(0, Math.ceil(msLeft / 86400000));
+}
+
+function timeAgo(ts) {
+  const mins = Math.floor((Date.now() - (Number(ts) || 0)) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hr ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+async function updateTrashBadge() {
+  const badge = document.getElementById('trash-count');
+  if (!badge) return;
+  const list = await loadTrashFromDB();
+  badge.textContent = list.length ? String(list.length) : '';
+  badge.style.display = list.length ? 'inline-block' : 'none';
+}
+
+async function runTrashPurge() {
+  try {
+    const purged = await purgeExpiredTrash(TRASH_RETENTION_MS);
+    if (purged > 0) {
+      recordLog('TRASH_PURGED', `Auto-deleted ${purged} app(s) older than ${TRASH_DAYS} days from trash.`);
+      await updateTrashBadge();
+      const modal = document.getElementById('trash-modal');
+      if (modal && modal.style.display === 'flex') await renderTrash();
+    }
+  } catch (err) {
+    recordLog('TRASH_ERR', `Auto-purge failed: ${err}`);
+  }
+}
+
+async function renderTrash() {
+  const listEl = document.getElementById('trash-list');
+  const emptyEl = document.getElementById('trash-empty');
+  const actionsEl = document.getElementById('trash-actions');
+  if (!listEl) return;
+  const items = await loadTrashFromDB();
+  listEl.innerHTML = '';
+  if (emptyEl) emptyEl.style.display = items.length ? 'none' : 'block';
+  if (actionsEl) actionsEl.style.display = items.length ? 'flex' : 'none';
+
+  items.forEach(item => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; align-items:center; gap:10px; padding:10px; border-radius:14px; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.08);';
+    const left = document.createElement('div');
+    left.style.cssText = 'flex:1; min-width:0;';
+    left.innerHTML =
+      `<div style="font-size:0.8rem; font-weight:600; color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(item.name)}</div>` +
+      `<div style="font-size:0.66rem; color:rgba(255,255,255,0.5); margin-top:2px;">Deleted ${escapeHtml(timeAgo(item.trashedAt))} · auto-deletes in ${daysLeft(item.trashedAt)} day${daysLeft(item.trashedAt) === 1 ? '' : 's'}</div>`;
+
+    const restoreBtn = document.createElement('button');
+    restoreBtn.type = 'button';
+    restoreBtn.textContent = 'Restore';
+    restoreBtn.style.cssText = 'padding:7px 11px; border-radius:10px; background:rgba(10,132,255,0.2); border:1px solid rgba(10,132,255,0.45); color:#0A84FF; font-size:0.7rem; font-weight:700; cursor:pointer;';
+    restoreBtn.onclick = async () => {
+      await restoreFromTrash(item.trashId);
+      await refreshApps();
+      await renderTrash();
+      await updateTrashBadge();
+      recordLog('APP_RESTORED', `Restored from trash: "${item.name}" (${item.id})`);
+      showToast(`Restored "${item.name}"`);
+    };
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.textContent = 'Delete';
+    delBtn.title = 'Delete forever';
+    delBtn.style.cssText = 'padding:7px 11px; border-radius:10px; background:rgba(255,69,58,0.15); border:1px solid rgba(255,69,58,0.35); color:#FF453A; font-size:0.7rem; font-weight:700; cursor:pointer;';
+    delBtn.onclick = async () => {
+      if (!confirm(`Permanently delete "${item.name}"? This cannot be undone.`)) return;
+      await deleteFromTrash(item.trashId);
+      await renderTrash();
+      await updateTrashBadge();
+      recordLog('APP_PURGED', `Permanently deleted from trash: "${item.name}" (${item.id})`);
+      showToast(`Permanently deleted "${item.name}"`);
+    };
+
+    row.append(left, restoreBtn, delBtn);
+    listEl.appendChild(row);
+  });
+}
+
+async function openTrash() {
+  closeModal('backup-modal');
+  await runTrashPurge();
+  await renderTrash();
+  openModal('trash-modal');
+}
+
+async function restoreAllFromTrash() {
+  const items = await loadTrashFromDB();
+  if (!items.length) return;
+  const n = await restoreFromTrash(items.map(i => i.trashId));
+  await refreshApps();
+  await renderTrash();
+  await updateTrashBadge();
+  recordLog('APP_RESTORED', `Restored ${n} app(s) from trash.`);
+  showToast(`Restored ${n} app${n === 1 ? '' : 's'}`);
+}
+
+async function emptyTrashNow() {
+  const items = await loadTrashFromDB();
+  if (!items.length) return;
+  if (!confirm(`Permanently delete all ${items.length} app(s) in the trash? This cannot be undone.`)) return;
+  const n = await emptyTrash();
+  await renderTrash();
+  await updateTrashBadge();
+  recordLog('TRASH_EMPTIED', `Emptied trash (${n} app(s)).`);
+  showToast("Trash emptied.");
 }
 
 function promptRenameApp(event, id) {
@@ -1100,7 +1271,14 @@ window.addEventListener('DOMContentLoaded', async () => {
   initDragListeners();
 
   await initDatabase();
+  await runTrashPurge();          // clear anything deleted more than 10 days ago
   await refreshApps();
+  await updateTrashBadge();
+  // Keep purging while the launcher stays open / when it returns to the foreground.
+  setInterval(runTrashPurge, 60 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') runTrashPurge();
+  });
   listenForShortcuts((id) => {
     const a = findApp(id);
     if (a) launchApp(a, showToast, collapseFloatingMenu);
@@ -1164,14 +1342,36 @@ window.addEventListener('DOMContentLoaded', async () => {
   const btnRestore = document.getElementById('btn-restore-backup');
   if (btnRestore) btnRestore.onclick = () => triggerPicker('backup-picker');
 
+  const btnOpenTrash = document.getElementById('btn-open-trash');
+  if (btnOpenTrash) btnOpenTrash.onclick = openTrash;
+
+  const btnRestoreAll = document.getElementById('btn-trash-restore-all');
+  if (btnRestoreAll) btnRestoreAll.onclick = restoreAllFromTrash;
+
+  const btnEmptyTrash = document.getElementById('btn-trash-empty');
+  if (btnEmptyTrash) btnEmptyTrash.onclick = emptyTrashNow;
+
   const btnWipe = document.getElementById('btn-wipe-all');
   if (btnWipe) {
     btnWipe.onclick = async () => {
-      if (confirm("Delete ALL apps? Make sure you exported a backup first.")) {
-        await clearAllAppsFromDB();
+      if (confirm(`Delete ALL apps? They move to Trash and can be restored for ${TRASH_DAYS} days.`)) {
+        let trashIds = [];
+        try {
+          trashIds = await moveAllAppsToTrash();
+        } catch (err) {
+          recordLog('TRASH_ERR', `Could not move all apps to trash: ${err}`);
+          return showToast("Could not delete apps.");
+        }
         await refreshApps();
+        await updateTrashBadge();
         closeModal('backup-modal');
-        showToast("All apps deleted.");
+        recordLog('APP_TRASHED', `Moved ${trashIds.length} app(s) to trash (Delete All).`);
+        showUndoToast(`Deleted ${trashIds.length} app${trashIds.length === 1 ? '' : 's'}`, async () => {
+          await restoreFromTrash(trashIds);
+          await refreshApps();
+          await updateTrashBadge();
+          showToast("All apps restored.");
+        });
       }
     };
   }
