@@ -460,6 +460,15 @@
           <span>Restore Backup (.json)</span>
         </button>
 
+        <button type="button" id="btn-open-trash" style="width:100%; padding:12px 16px; border-radius:14px; background:rgba(255,159,10,0.15); border:1px solid rgba(255,159,10,0.4); color:#FF9F0A; font-weight:600; font-size:0.75rem; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+          <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+          <span>Trash (restore deleted apps)</span>
+          <span id="trash-count" style="display:none; min-width:18px; padding:1px 6px; border-radius:9999px; background:#FF9F0A; color:#000; font-size:0.65rem; font-weight:800;"></span>
+        </button>
+
         <button type="button" id="btn-wipe-all" style="width:100%; padding:10px 16px; border-radius:14px; background:rgba(255,69,58,0.15); border:1px solid rgba(255,69,58,0.3); color:#FF453A; font-weight:600; font-size:0.75rem; display:flex; align-items:center; justify-content:center; gap:6px; cursor:pointer;">
           <svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="3 6 5 6 21 6"></polyline>
@@ -472,6 +481,24 @@
       <button type="button" class="btn-close-modal" data-target="backup-modal" style="width:100%; padding:10px; border-radius:12px; background:rgba(255,255,255,0.1); font-size:0.75rem; font-weight:600; color:white; cursor:pointer;">
         Done
       </button>
+    </div>
+  </div>
+
+  <!-- TRASH MODAL -->
+  <div id="trash-modal" style="position:fixed; inset:0; z-index:55; display:none; background:rgba(0,0,0,0.75); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); align-items:center; justify-content:center; padding:16px;">
+    <div class="glass-panel" style="width:100%; max-width:380px; max-height:calc(100vh - 32px); border-radius:24px; padding:20px; display:flex; flex-direction:column; gap:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="font-size:1rem; font-weight:700; color:white;">Trash</h2>
+        <button type="button" class="btn-close-modal" data-target="trash-modal" style="background:rgba(255,255,255,0.1); border-radius:9999px; width:28px; height:28px; color:rgba(255,255,255,0.7); cursor:pointer;">&times;</button>
+      </div>
+      <div style="font-size:0.7rem; color:rgba(255,255,255,0.55); line-height:1.4;">Deleted apps stay here for 10 days, then are removed automatically. Restore them, or delete them forever.</div>
+      <div id="trash-list" class="no-scrollbar" style="display:flex; flex-direction:column; gap:8px; overflow-y:auto; min-height:0; flex:1;"></div>
+      <div id="trash-empty" style="display:none; text-align:center; padding:24px 0; font-size:0.78rem; color:rgba(255,255,255,0.45);">Trash is empty</div>
+      <div id="trash-actions" style="display:none; gap:8px;">
+        <button type="button" id="btn-trash-restore-all" class="style-btn" style="background:rgba(10,132,255,0.25);">Restore All</button>
+        <button type="button" id="btn-trash-empty" class="style-btn" style="background:rgba(255,69,58,0.25); color:#FF453A;">Empty Trash</button>
+      </div>
+      <button type="button" class="btn-close-modal" data-target="trash-modal" style="width:100%; padding:10px; border-radius:12px; background:rgba(255,255,255,0.1); font-size:0.75rem; font-weight:600; color:white; cursor:pointer;">Done</button>
     </div>
   </div>
 
