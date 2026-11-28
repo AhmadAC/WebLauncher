@@ -399,14 +399,27 @@
         <h2 id="shortcut-title" style="font-size:1rem; font-weight:700; color:white;">Add to Home Screen</h2>
         <button type="button" class="btn-close-modal" data-target="shortcut-modal" style="background:rgba(255,255,255,0.1); border-radius:9999px; width:28px; height:28px; color:rgba(255,255,255,0.7); cursor:pointer;">&times;</button>
       </div>
-      <div style="font-size:0.72rem; color:rgba(255,255,255,0.6); line-height:1.4;">Link that opens this app directly:</div>
-      <input id="shortcut-url" readonly style="width:100%; height:36px; padding:0 10px; border-radius:10px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white; font-size:12px; font-family:ui-monospace,Menlo,monospace;">
-      <button type="button" id="btn-sc-copy" class="style-btn">Copy link</button>
+
+      <div class="style-section-label" style="margin-bottom:0;">1. Home Screen Icon (Easiest)</div>
       <button type="button" id="btn-sc-profile" class="style-btn" style="background:#0A84FF;">Create home-screen icon (profile)</button>
-      <div style="font-size:0.72rem; color:rgba(255,255,255,0.6); line-height:1.4;">Using LiveContainer? In LiveContainer, hold WebLauncher &rarr; Add to Home Screen &rarr; Copy Launch URL, then paste it here:</div>
-      <input id="shortcut-lc" placeholder="livecontainer://livecontainer-launch?..." autocapitalize="off" autocomplete="off" spellcheck="false" style="width:100%; height:36px; padding:0 10px; border-radius:10px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white; font-size:16px;">
-      <button type="button" id="btn-sc-lc" class="style-btn">Copy LiveContainer link</button>
-      <button type="button" id="btn-sc-test" class="style-btn">Test link now</button>
+      <div style="font-size:0.68rem; color:rgba(255,255,255,0.55); line-height:1.4;">Install in <strong>Settings &gt; Profile Downloaded</strong>.</div>
+
+      <div style="border-top:1px solid rgba(255,255,255,0.1); padding-top:10px; display:flex; flex-direction:column; gap:8px;">
+        <div class="style-section-label" style="margin-bottom:0;">Direct Launch Link</div>
+        <input id="shortcut-url" readonly style="width:100%; height:36px; padding:0 10px; border-radius:10px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white; font-size:12px; font-family:ui-monospace,Menlo,monospace;">
+        <div style="display:flex; gap:8px;">
+          <button type="button" id="btn-sc-copy" class="style-btn">Copy link</button>
+          <button type="button" id="btn-sc-test" class="style-btn">Test link now</button>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid rgba(255,255,255,0.1); padding-top:10px; display:flex; flex-direction:column; gap:8px;">
+        <div class="style-section-label" style="margin-bottom:0;">2. LiveContainer</div>
+        <div style="font-size:0.72rem; color:rgba(255,255,255,0.6); line-height:1.4;">In LiveContainer, hold WebLauncher &rarr; Add to Home Screen &rarr; Copy Launch URL, then paste it here:</div>
+        <input id="shortcut-lc" placeholder="Paste LiveContainer Launch URL or bundle name" autocapitalize="off" autocomplete="off" spellcheck="false" style="width:100%; height:36px; padding:0 10px; border-radius:10px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white; font-size:16px;">
+        <button type="button" id="btn-sc-lc" class="style-btn">Copy LiveContainer link</button>
+      </div>
+
       <div id="shortcut-help" style="font-size:0.68rem; color:rgba(255,255,255,0.5); line-height:1.45;">Shortcuts app: New Shortcut &rarr; Open URLs &rarr; paste link &rarr; Add to Home Screen.</div>
     </div>
   </div>
