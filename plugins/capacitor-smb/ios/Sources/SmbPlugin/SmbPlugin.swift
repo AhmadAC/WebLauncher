@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Capacitor
 import AMSMB2
 
@@ -95,6 +96,85 @@ final class SMBBonjourDiscovery: NSObject, NetServiceBrowserDelegate, NetService
                 "hostName": host,
                 "port": 445
             ])
+        }
+    }
+}
+
+/// Fallback discovery: many PCs (Windows especially) do not advertise SMB over Bonjour, so also
+/// probe TCP port 445 on the phone's own /24 subnet plus any extra /24 subnets passed in.
+enum SMBPortSweep {
+    static func fmt(_ ip: UInt32) -> String {
+        return "\((ip >> 24) & 255).\((ip >> 16) & 255).\((ip >> 8) & 255).\(ip & 255)"
+    }
+
+    static func parseIPv4(_ s: String) -> UInt32? {
+        let parts = s.split(separator: ".").compactMap { UInt32($0) }
+        guard parts.count == 4, parts.allSatisfy({ $0 < 256 }) else { return nil }
+        return (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]
+    }
+
+    /// "172.31.2.9", "172.31.2" or "172.31.2.0/24" -> 172.31.2.0
+    static func block(from s: String) -> UInt32? {
+        var t = s.trimmingCharacters(in: .whitespaces)
+        if let slash = t.firstIndex(of: "/") { t = String(t[..<slash]) }
+        var parts = t.split(separator: ".").map(String.init)
+        guard parts.count >= 3 else { return nil }
+        parts = Array(parts.prefix(3)) + ["0"]
+        guard let ip = parseIPv4(parts.joined(separator: ".")) else { return nil }
+        return ip & 0xFFFFFF00
+    }
+
+    static func wifiAddress() -> UInt32? {
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return nil }
+        defer { freeifaddrs(ifaddr) }
+        var result: UInt32?
+        var ptr: UnsafeMutablePointer<ifaddrs>? = first
+        while let p = ptr {
+            let ifa = p.pointee
+            if let sa = ifa.ifa_addr, sa.pointee.sa_family == UInt8(AF_INET), let namePtr = ifa.ifa_name {
+                let name = String(cString: namePtr)
+                if name.hasPrefix("en") {
+                    let ip = sa.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { UInt32(bigEndian: $0.pointee.sin_addr.s_addr) }
+                    if result == nil || name == "en0" { result = ip }
+                }
+            }
+            ptr = ifa.ifa_next
+        }
+        return result
+    }
+
+    static func sweep(blocks: [UInt32], timeout: TimeInterval, completion: @escaping ([String]) -> Void) {
+        let q = DispatchQueue(label: "smb.portsweep")
+        q.async {
+            var found: [String] = []
+            var conns: [NWConnection] = []
+            var finished = false
+            for base in Set(blocks) {
+                for last in 1...254 {
+                    let host = fmt(base | UInt32(last))
+                    let c = NWConnection(host: NWEndpoint.Host(host), port: 445, using: .tcp)
+                    c.stateUpdateHandler = { state in
+                        switch state {
+                        case .ready:
+                            if !found.contains(host) { found.append(host) }
+                            c.cancel()
+                        case .failed:
+                            c.cancel()
+                        default:
+                            break
+                        }
+                    }
+                    conns.append(c)
+                    c.start(queue: q)
+                }
+            }
+            q.asyncAfter(deadline: .now() + timeout) {
+                if finished { return }
+                finished = true
+                conns.forEach { $0.cancel() }
+                completion(found)
+            }
         }
     }
 }
@@ -201,11 +281,47 @@ public class SmbPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func discoverServers(_ call: CAPPluginCall) {
         let timeout = call.getDouble("timeout") ?? 3.5
-        let discovery = SMBBonjourDiscovery()
-        self.activeDiscovery = discovery
-        discovery.discover(timeout: timeout) { [weak self] servers in
+        let hints = call.getArray("hints", String.self) ?? []
+
+        var blocks: [UInt32] = []
+        if let mine = SMBPortSweep.wifiAddress() { blocks.append(mine & 0xFFFFFF00) }
+        for h in hints { if let b = SMBPortSweep.block(from: h) { blocks.append(b) } }
+
+        var bonjour: [[String: Any]] = []
+        var swept: [String] = []
+        let group = DispatchGroup()
+
+        // NetServiceBrowser needs a running run loop, so it must be started on the main thread.
+        group.enter()
+        DispatchQueue.main.async {
+            let discovery = SMBBonjourDiscovery()
+            self.activeDiscovery = discovery
+            discovery.discover(timeout: timeout) { servers in
+                bonjour = servers
+                group.leave()
+            }
+        }
+
+        group.enter()
+        if blocks.isEmpty {
+            group.leave()
+        } else {
+            SMBPortSweep.sweep(blocks: blocks, timeout: min(timeout, 3.0)) { ips in
+                swept = ips
+                group.leave()
+            }
+        }
+
+        group.notify(queue: .main) { [weak self] in
             self?.activeDiscovery = nil
-            call.resolve(["servers": servers])
+            var merged = bonjour
+            for ip in swept {
+                let known = merged.contains { ($0["host"] as? String) == ip || ($0["ip"] as? String) == ip }
+                if !known {
+                    merged.append(["name": ip, "host": ip, "ip": ip, "hostName": "", "port": 445])
+                }
+            }
+            call.resolve(["servers": merged])
         }
     }
 
