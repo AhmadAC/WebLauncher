@@ -2,8 +2,6 @@
 // MAIN CONTROLLER: COORDINATION, SVG ICON PICKER & UI BINDINGS
 // =========================================================================
 
-// Module namespaces (loaded dynamically at boot so a missing file or export
-// in ./modules/*.js never aborts app.js before UI buttons are bound).
 let loggerMod = {};
 let dbMod = {};
 let zipMod = {};
@@ -20,6 +18,13 @@ function recordLog(tag, message) {
     try { loggerMod.recordLog(tag, message); } catch (_) {}
   }
 }
+
+window.addEventListener('error', (e) => {
+  recordLog('UNCAUGHT_ERR', `${e.message || e} (${e.filename || ''}:${e.lineno || 0})`);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  recordLog('UNHANDLED_REJECTION', String(e.reason?.stack || e.reason || e));
+});
 
 async function downloadAppLogs() {
   if (typeof loggerMod.downloadAppLogs === 'function') {
@@ -186,6 +191,9 @@ function triggerPicker(id) {
   if (input) {
     input.value = '';
     input.click();
+  } else {
+    recordLog('PICKER_ERR', `Missing picker: ${id}`);
+    showToast('File picker missing.');
   }
   closeModal('import-modal');
 }
@@ -195,7 +203,7 @@ function getScrollerEl() {
 }
 
 // =========================================================================
-// MODULE SHIMS (DB / ZIP / RUNTIME / FLOATING MENU)
+// MODULE SHIMS
 // =========================================================================
 function getTrashRetentionMs() {
   return Number.isFinite(dbMod.TRASH_RETENTION_MS) ? dbMod.TRASH_RETENTION_MS : (10 * 24 * 60 * 60 * 1000);
@@ -235,10 +243,22 @@ function safeCollapseFloatingMenu() {
 }
 
 function safeLaunchApp(app) {
-  if (typeof runtimeMod.launchApp === 'function') {
-    runtimeMod.launchApp(app, showToast, safeCollapseFloatingMenu);
-  } else {
+  if (typeof runtimeMod.launchApp !== 'function') {
+    recordLog('LAUNCH_ERR', 'runtimeMod.launchApp is not available.');
     showToast('Runtime module unavailable.');
+    return;
+  }
+  try {
+    const res = runtimeMod.launchApp(app, showToast, safeCollapseFloatingMenu);
+    if (res && typeof res.catch === 'function') {
+      res.catch((err) => {
+        recordLog('LAUNCH_ERR', `Async launch failed for "${app?.name}": ${err?.stack || err}`);
+        showToast('Failed to open app.');
+      });
+    }
+  } catch (err) {
+    recordLog('LAUNCH_ERR', `Sync launch failed for "${app?.name}": ${err?.stack || err}`);
+    showToast('Failed to open app.');
   }
 }
 
@@ -596,6 +616,7 @@ async function refreshApps() {
   try {
     const loaded = await dbLoadApps();
     apps = Array.isArray(loaded) ? loaded : [];
+    recordLog('APPS_LOADED', `Loaded ${apps.length} app(s) from DB.`);
   } catch (err) {
     recordLog('DB_LOAD_ERR', `Could not load apps: ${err}`);
     showToast('Could not load saved apps.');
