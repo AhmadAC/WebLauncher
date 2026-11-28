@@ -1,3 +1,4 @@
+Here is the updated runtime.js. It adds a short deduplication guard in launchApp (ignoring duplicate launches for the same app.id within 1500 ms) and serializes in-flight multi-file launches so simultaneous weblauncher://launch triggers don't spawn duplicate server instances or race against each other.
 // =========================================================================
 // RUNTIME ENGINE: VIRTUAL BUNDLER, CAPACITOR BRIDGE & EXPORT BUILDER
 // =========================================================================
@@ -6,6 +7,10 @@ import { saveAppToDB } from './db.js';
 
 let activeBlobUrls = [];
 let currentRunningApp = null;
+let lastLaunchAttempt = { id: null, time: 0 };
+let activeLaunchPromise = null;
+
+const LAUNCH_DEDUP_WINDOW_MS = 1500;
 
 export function getCurrentRunningApp() {
   return currentRunningApp;
@@ -281,23 +286,40 @@ export async function cycleLaunchMode(showToast) {
   recordLog('APP_MODE', `${currentRunningApp.name}: ${next.label}`);
   updateModeButton();
   if (showToast) showToast(next.label + ' - reloading');
-  assembleAndLoadApp(currentRunningApp, showToast);
+  await assembleAndLoadApp(currentRunningApp, showToast, { force: true });
 }
 
 export function launchApp(app, showToast, collapseFloatingMenu) {
   if (!app || (!app.code && !app.files)) {
-    showToast("App files are empty.");
+    if (showToast) showToast("App files are empty.");
     return;
   }
+
+  const now = Date.now();
+  const appKey = String(app.id);
+  const isDuplicateBurst =
+    lastLaunchAttempt.id === appKey &&
+    now - lastLaunchAttempt.time < LAUNCH_DEDUP_WINDOW_MS &&
+    (activeLaunchPromise !== null || (currentRunningApp && String(currentRunningApp.id) === appKey));
+
+  if (isDuplicateBurst) {
+    recordLog('APP_LAUNCH_DEDUP', `Ignored duplicate launch for ${app.name} (ID: ${app.id}) within ${now - lastLaunchAttempt.time}ms`);
+    if (typeof collapseFloatingMenu === 'function') collapseFloatingMenu();
+    const modal = document.getElementById('runtime-modal');
+    if (modal) modal.style.display = 'flex';
+    return activeLaunchPromise;
+  }
+
+  lastLaunchAttempt = { id: appKey, time: now };
   currentRunningApp = app;
   updateModeButton();
   recordLog('APP_LAUNCH', `Launching: ${app.name} (ID: ${app.id})`);
 
   const modal = document.getElementById('runtime-modal');
-  collapseFloatingMenu();
+  if (typeof collapseFloatingMenu === 'function') collapseFloatingMenu();
 
-  modal.style.display = 'flex';
-  assembleAndLoadApp(app, showToast);
+  if (modal) modal.style.display = 'flex';
+  return assembleAndLoadApp(app, showToast);
 }
 
 // Some web builds import files by a relative path that does not exist in the zip (e.g. app/photocraft-web.js
@@ -343,33 +365,68 @@ export function repairMissingImports(app) {
   return added;
 }
 
-export function assembleAndLoadApp(app, showToast) {
-  cleanupActiveBlobs();
-  const iframe = document.getElementById('runtime-iframe');
-  iframe.removeAttribute('src');
+export async function assembleAndLoadApp(app, showToast, options = {}) {
+  const force = Boolean(options && options.force);
 
-  // Multi-file apps (zips, folders, WebAssembly) run on the virtual local server when available
-  if (app.files && Object.keys(app.files).length > 1) {
-    const token = Symbol('launch');
-    assembleAndLoadApp.token = token;
-    (async () => {
+  if (activeLaunchPromise && !force) {
+    try {
+      await activeLaunchPromise;
+    } catch (e) {}
+  }
+
+  const runLoad = async () => {
+    cleanupActiveBlobs();
+    const iframe = document.getElementById('runtime-iframe');
+    if (!iframe) return;
+
+    // Multi-file apps (zips, folders, WebAssembly) run on the virtual local server when available
+    if (app.files && Object.keys(app.files).length > 1) {
+      const token = Symbol('launch');
+      assembleAndLoadApp.token = token;
+
       let ok = false;
-      try { if (repairMissingImports(app) > 0) await saveAppToDB(app); } catch (e) { recordLog('IMPORT_REPAIR_ERR', String(e)); }
-      if (needsRealServer(app)) ok = await tryLaunchViaNativeServer(app, iframe, showToast);
-      if (!ok) ok = await tryLaunchViaVirtualServer(app, iframe);
-      if (assembleAndLoadApp.token !== token) {   // user exited / relaunched meanwhile
+      try {
+        if (repairMissingImports(app) > 0) await saveAppToDB(app);
+      } catch (e) {
+        recordLog('IMPORT_REPAIR_ERR', String(e));
+      }
+      if (assembleAndLoadApp.token !== token) return;
+
+      if (needsRealServer(app)) {
+        ok = await tryLaunchViaNativeServer(app, iframe, showToast);
+      }
+      if (assembleAndLoadApp.token !== token) {
         if (ok) iframe.src = 'about:blank';
         return;
       }
+
+      if (!ok) {
+        ok = await tryLaunchViaVirtualServer(app, iframe);
+      }
+      if (assembleAndLoadApp.token !== token) {
+        if (ok) iframe.src = 'about:blank';
+        return;
+      }
+
       if (ok) return;
       if (showToast) {
         showToast('No local server available here - using basic mode (some apps may not run).');
       }
       assembleBundledApp(app, iframe);
-    })();
-    return;
-  }
-  assembleBundledApp(app, iframe);
+      return;
+    }
+
+    iframe.removeAttribute('src');
+    assembleBundledApp(app, iframe);
+  };
+
+  const currentPromise = runLoad().finally(() => {
+    if (activeLaunchPromise === currentPromise) {
+      activeLaunchPromise = null;
+    }
+  });
+  activeLaunchPromise = currentPromise;
+  return currentPromise;
 }
 
 // Fallback: single file apps, or when service workers are unavailable (file://, iOS WebView)
@@ -554,9 +611,13 @@ export function exitApp() {
   const modal = document.getElementById('runtime-modal');
   const iframe = document.getElementById('runtime-iframe');
   assembleAndLoadApp.token = null;
-  modal.style.display = 'none';
-  iframe.srcdoc = '';
-  iframe.src = 'about:blank';
+  activeLaunchPromise = null;
+  lastLaunchAttempt = { id: null, time: 0 };
+  if (modal) modal.style.display = 'none';
+  if (iframe) {
+    iframe.srcdoc = '';
+    iframe.src = 'about:blank';
+  }
   cleanupActiveBlobs();
   currentRunningApp = null;
   recordLog('APP_EXIT', 'Closed app runtime.');
@@ -564,8 +625,8 @@ export function exitApp() {
 
 export function reloadApp(showToast) {
   if (currentRunningApp) {
-    assembleAndLoadApp(currentRunningApp, showToast);
-    showToast("App reloaded");
+    assembleAndLoadApp(currentRunningApp, showToast, { force: true });
+    if (showToast) showToast("App reloaded");
     recordLog('APP_RELOAD', `Reloaded: ${currentRunningApp.name}`);
   }
 }
@@ -597,3 +658,4 @@ export function getExportableCode(targetApp) {
 
   return html;
 }
+
