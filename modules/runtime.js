@@ -1,4 +1,4 @@
-Here is the updated runtime.js. It adds a short deduplication guard in launchApp (ignoring duplicate launches for the same app.id within 1500 ms) and serializes in-flight multi-file launches so simultaneous weblauncher://launch triggers don't spawn duplicate server instances or race against each other.
+
 // =========================================================================
 // RUNTIME ENGINE: VIRTUAL BUNDLER, CAPACITOR BRIDGE & EXPORT BUILDER
 // =========================================================================
