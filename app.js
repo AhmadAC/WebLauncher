@@ -1,16 +1,74 @@
 // =========================================================================
 // MAIN CONTROLLER: COORDINATION, SVG ICON PICKER & UI BINDINGS
 // =========================================================================
-import { initLogger, recordLog, downloadAppLogs } from './modules/logger.js';
-import {
-  initDatabase, loadAppsFromDB, saveAppToDB, saveAppsToDB,
-  moveAppToTrash, moveAllAppsToTrash, loadTrashFromDB, restoreFromTrash,
-  deleteFromTrash, emptyTrash, purgeExpiredTrash, TRASH_RETENTION_MS
-} from './modules/db.js';
-import { readFileContent, parseZipBuffer, normalizeFileTree } from './modules/zip.js';
-import { launchApp, exitApp, reloadApp, getExportableCode, registerVirtualServer, cycleLaunchMode } from './modules/runtime.js';
-import { shortcutUrl, liveContainerUrl, getLcBundle, setLcBundle, buildWebClip, renderIconPng, listenForShortcuts } from './modules/shortcuts.js';
-import { setupFloatingMenu, collapseFloatingMenu } from './modules/floatingMenu.js';
+
+// Module namespaces (loaded dynamically at boot so a missing file or export
+// in ./modules/*.js never aborts app.js before UI buttons are bound).
+let loggerMod = {};
+let dbMod = {};
+let zipMod = {};
+let runtimeMod = {};
+let shortcutsMod = {};
+let floatingMenuMod = {};
+
+const fallbackLogs = [];
+
+function recordLog(tag, message) {
+  const line = `[${new Date().toISOString()}] [${tag}] ${message}`;
+  fallbackLogs.push(line);
+  if (typeof loggerMod.recordLog === 'function') {
+    try { loggerMod.recordLog(tag, message); } catch (_) {}
+  }
+}
+
+async function downloadAppLogs() {
+  if (typeof loggerMod.downloadAppLogs === 'function') {
+    try { return await loggerMod.downloadAppLogs(); } catch (_) {}
+  }
+  const text = fallbackLogs.join('\n') || 'No logs recorded.';
+  const filename = `weblauncher-debug-${Date.now()}.log`;
+
+  if (navigator.share && navigator.canShare) {
+    try {
+      const file = new File([text], filename, { type: 'text/plain' });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'WebLauncher Debug Log' });
+        return showToast('Debug log shared!');
+      }
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+    }
+  }
+
+  try {
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast('Debug log downloaded');
+  } catch (_) {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('Debug log copied to clipboard');
+    } catch (__) {
+      alert(text);
+    }
+  }
+}
+
+async function safeImport(path) {
+  try {
+    return await import(path);
+  } catch (err) {
+    recordLog('MODULE_LOAD_ERR', `${path} failed to load: ${err?.message || err}`);
+    return {};
+  }
+}
 
 // Gradient presets. The keys match the legacy CSS class names that older saved apps
 // store in `app.gradient`, so existing apps keep their colour.
@@ -70,11 +128,6 @@ export function syncNativePlugins() {
 }
 
 syncNativePlugins();
-try {
-  registerVirtualServer();
-} catch (err) {
-  console.warn('VirtualServer init skipped:', err);
-}
 
 let toastTimer = null;
 
@@ -142,6 +195,54 @@ function getScrollerEl() {
 }
 
 // =========================================================================
+// MODULE SHIMS (DB / ZIP / RUNTIME / FLOATING MENU)
+// =========================================================================
+function getTrashRetentionMs() {
+  return Number.isFinite(dbMod.TRASH_RETENTION_MS) ? dbMod.TRASH_RETENTION_MS : (10 * 24 * 60 * 60 * 1000);
+}
+
+function getTrashDays() {
+  return Math.round(getTrashRetentionMs() / 86400000);
+}
+
+async function dbSaveApp(app) {
+  if (typeof dbMod.saveAppToDB === 'function') return dbMod.saveAppToDB(app);
+  throw new Error('saveAppToDB not available in modules/db.js');
+}
+
+async function dbSaveApps(list) {
+  if (typeof dbMod.saveAppsToDB === 'function') return dbMod.saveAppsToDB(list);
+  if (typeof dbMod.saveAppToDB === 'function') {
+    for (const item of list) await dbMod.saveAppToDB(item);
+  }
+}
+
+async function dbLoadApps() {
+  if (typeof dbMod.loadAppsFromDB === 'function') return dbMod.loadAppsFromDB();
+  throw new Error('loadAppsFromDB not available in modules/db.js');
+}
+
+async function readSingleOrMultiFile(file) {
+  if (typeof zipMod.readFileContent === 'function') return zipMod.readFileContent(file);
+  const content = await file.text();
+  return { content, isBinary: false, type: file.type || 'text/html' };
+}
+
+function safeCollapseFloatingMenu() {
+  if (typeof floatingMenuMod.collapseFloatingMenu === 'function') {
+    floatingMenuMod.collapseFloatingMenu();
+  }
+}
+
+function safeLaunchApp(app) {
+  if (typeof runtimeMod.launchApp === 'function') {
+    runtimeMod.launchApp(app, showToast, safeCollapseFloatingMenu);
+  } else {
+    showToast('Runtime module unavailable.');
+  }
+}
+
+// =========================================================================
 // SVG ICON PICKER & REPLACEMENT LOGIC FOR IPHONE
 // =========================================================================
 function openIconPickerForApp(appId) {
@@ -154,7 +255,7 @@ function openIconPickerForApp(appId) {
 }
 
 async function handleIconPicked(event) {
-  const file = event.target.files[0];
+  const file = event.target.files && event.target.files[0];
   if (!file || !targetAppForIcon) return;
 
   if (!file.name.toLowerCase().endsWith('.svg') && file.type !== 'image/svg+xml') {
@@ -170,7 +271,7 @@ async function handleIconPicked(event) {
     const target = apps.find(a => String(a.id) === String(targetAppForIcon));
     if (target) {
       target.icon = base64Svg;
-      await saveAppToDB(target);
+      await dbSaveApp(target);
       await refreshApps();
       showToast(`Updated icon for "${target.name}"`);
       recordLog('ICON_UPDATED', `Custom SVG icon set for app: ${target.name} (${target.id})`);
@@ -312,7 +413,7 @@ function initSearch() {
       const first = getVisibleApps()[0];
       input.blur();
       if (first && searchQuery.trim() && !isEditMode) {
-        launchApp(first, showToast, collapseFloatingMenu);
+        safeLaunchApp(first);
       }
     } else if (e.key === 'Escape') {
       input.value = '';
@@ -378,7 +479,7 @@ export function renderLauncher() {
         openStyleModal(app.id);
         return;
       }
-      launchApp(app, showToast, collapseFloatingMenu);
+      safeLaunchApp(app);
     };
 
     const fileCount = app.files && typeof app.files === 'object' ? Object.keys(app.files).length : 1;
@@ -484,7 +585,7 @@ async function normalizeOrder() {
   });
   if (changed.length) {
     try {
-      await saveAppsToDB(changed);
+      await dbSaveApps(changed);
     } catch (err) {
       recordLog('ORDER_ERR', `Could not save app order: ${err}`);
     }
@@ -493,7 +594,7 @@ async function normalizeOrder() {
 
 async function refreshApps() {
   try {
-    const loaded = await loadAppsFromDB();
+    const loaded = await dbLoadApps();
     apps = Array.isArray(loaded) ? loaded : [];
   } catch (err) {
     recordLog('DB_LOAD_ERR', `Could not load apps: ${err}`);
@@ -616,7 +717,7 @@ async function flushStyleSave() {
   const app = findApp(styleTargetId);
   if (!app) return;
   try {
-    await saveAppToDB(app);
+    await dbSaveApp(app);
   } catch (err) {
     recordLog('STYLE_ERR', `Could not save tile style: ${err}`);
     showToast('Could not save tile style');
@@ -646,7 +747,7 @@ async function applyStyleToAll() {
   clearTimeout(styleSaveTimer);
   styleDirty = false;
   try {
-    await saveAppsToDB(apps);
+    await dbSaveApps(apps);
   } catch (err) {
     recordLog('STYLE_ERR', `Could not save styles: ${err}`);
     showToast('Could not save tile styles');
@@ -682,8 +783,12 @@ async function copyText(t) {
 function openShortcutModal(id) {
   const app = findApp(id);
   if (!app) return;
+  if (typeof shortcutsMod.shortcutUrl !== 'function') {
+    showToast('Shortcuts module unavailable.');
+    return;
+  }
 
-  const directUrl = shortcutUrl(app.id);
+  const directUrl = shortcutsMod.shortcutUrl(app.id);
   const titleEl = document.getElementById('shortcut-title');
   const urlEl = document.getElementById('shortcut-url');
   const lcEl = document.getElementById('shortcut-lc');
@@ -695,16 +800,18 @@ function openShortcutModal(id) {
   if (titleEl) titleEl.textContent = `Add ${app.name} to Home Screen`;
   if (urlEl) urlEl.value = directUrl;
   if (lcEl) {
-    lcEl.value = getLcBundle();
+    lcEl.value = typeof shortcutsMod.getLcBundle === 'function' ? shortcutsMod.getLcBundle() : '';
     lcEl.placeholder = 'Paste LiveContainer Launch URL or bundle name';
-    lcEl.onchange = () => setLcBundle(lcEl.value.trim());
+    lcEl.onchange = () => {
+      if (typeof shortcutsMod.setLcBundle === 'function') shortcutsMod.setLcBundle(lcEl.value.trim());
+    };
   }
 
   const getCurrentLaunchUrl = () => {
     const bundle = lcEl ? lcEl.value.trim() : '';
-    if (bundle) {
-      setLcBundle(bundle);
-      return liveContainerUrl(app.id, bundle);
+    if (bundle && typeof shortcutsMod.liveContainerUrl === 'function') {
+      if (typeof shortcutsMod.setLcBundle === 'function') shortcutsMod.setLcBundle(bundle);
+      return shortcutsMod.liveContainerUrl(app.id, bundle);
     }
     return directUrl;
   };
@@ -724,8 +831,8 @@ function openShortcutModal(id) {
         if (lcEl) lcEl.focus();
         return;
       }
-      setLcBundle(bundle);
-      const lcLink = liveContainerUrl(app.id, bundle);
+      if (typeof shortcutsMod.setLcBundle === 'function') shortcutsMod.setLcBundle(bundle);
+      const lcLink = shortcutsMod.liveContainerUrl(app.id, bundle);
       const ok = await copyText(lcLink);
       showToast(ok ? 'LiveContainer link copied (paste in Shortcuts)' : 'Could not copy LiveContainer link');
     };
@@ -739,7 +846,7 @@ function openShortcutModal(id) {
         LL.openExternal({ url: targetUrl }).catch(() => showToast('Could not open link'));
       } else {
         closeModal('shortcut-modal');
-        launchApp(app, showToast, collapseFloatingMenu);
+        safeLaunchApp(app);
       }
     };
   }
@@ -748,8 +855,8 @@ function openShortcutModal(id) {
     profileBtn.onclick = async () => {
       try {
         showToast('Building Home Screen icon...');
-        const png = await renderIconPng(app);
-        const xml = buildWebClip(app, directUrl, png);
+        const png = await shortcutsMod.renderIconPng(app);
+        const xml = shortcutsMod.buildWebClip(app, directUrl, png);
         const LS = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalServer;
         const LL = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LaunchLink;
         if (LS && LL) {
@@ -994,7 +1101,7 @@ async function commitOrderFromDOM() {
   if (changed.length === 0) return;
 
   try {
-    await saveAppsToDB(changed);
+    await dbSaveApps(changed);
     recordLog('APP_REORDERED', `Home screen order saved (${changed.length} moved)`);
   } catch (err) {
     recordLog('ORDER_ERR', `Could not save app order: ${err}`);
@@ -1063,7 +1170,7 @@ async function finalizeMultiFileApp(appFiles, fallbackName) {
   };
 
   try {
-    await saveAppToDB(newApp);
+    await dbSaveApp(newApp);
   } catch (err) {
     recordLog('APP_SAVE_ERR', `Could not save "${finalName}": ${err}`);
     showToast(`Failed to save "${finalName}".`);
@@ -1079,9 +1186,24 @@ async function removeApp(event, id) {
   event.stopPropagation();
   const target = findApp(id);
   const name = target ? target.name : 'App';
+  if (typeof dbMod.moveAppToTrash !== 'function') {
+    if (typeof dbMod.deleteAppFromDB === 'function') {
+      try {
+        await dbMod.deleteAppFromDB(id);
+        await refreshApps();
+        showToast(`Deleted "${name}"`);
+      } catch (err) {
+        showToast("Could not delete app.");
+      }
+    } else {
+      showToast("Delete unavailable.");
+    }
+    return;
+  }
+
   let trashId = null;
   try {
-    trashId = await moveAppToTrash(id);
+    trashId = await dbMod.moveAppToTrash(id);
   } catch (err) {
     recordLog('TRASH_ERR', `Could not move "${name}" to trash: ${err}`);
     return showToast("Could not delete app.");
@@ -1091,21 +1213,21 @@ async function removeApp(event, id) {
   if (!trashId) return showToast("App not found.");
   recordLog('APP_TRASHED', `Moved to trash: "${name}" (${id})`);
   showUndoToast(`Deleted "${name}"`, async () => {
-    await restoreFromTrash(trashId);
-    await refreshApps();
-    await updateTrashBadge();
-    recordLog('APP_RESTORED', `Undo delete: "${name}" (${id})`);
-    showToast(`Restored "${name}"`);
+    if (typeof dbMod.restoreFromTrash === 'function') {
+      await dbMod.restoreFromTrash(trashId);
+      await refreshApps();
+      await updateTrashBadge();
+      recordLog('APP_RESTORED', `Undo delete: "${name}" (${id})`);
+      showToast(`Restored "${name}"`);
+    }
   });
 }
 
 // =========================================================================
 // TRASH: list, restore, delete forever, auto-clear after 10 days
 // =========================================================================
-const TRASH_DAYS = Math.round(TRASH_RETENTION_MS / 86400000);
-
 function daysLeft(trashedAt) {
-  const msLeft = (Number(trashedAt) || 0) + TRASH_RETENTION_MS - Date.now();
+  const msLeft = (Number(trashedAt) || 0) + getTrashRetentionMs() - Date.now();
   return Math.max(0, Math.ceil(msLeft / 86400000));
 }
 
@@ -1122,8 +1244,13 @@ function timeAgo(ts) {
 async function updateTrashBadge() {
   const badge = document.getElementById('trash-count');
   if (!badge) return;
+  if (typeof dbMod.loadTrashFromDB !== 'function') {
+    badge.textContent = '';
+    badge.style.display = 'none';
+    return;
+  }
   try {
-    const list = await loadTrashFromDB();
+    const list = await dbMod.loadTrashFromDB();
     const count = Array.isArray(list) ? list.length : 0;
     badge.textContent = count ? String(count) : '';
     badge.style.display = count ? 'inline-block' : 'none';
@@ -1135,10 +1262,11 @@ async function updateTrashBadge() {
 }
 
 async function runTrashPurge() {
+  if (typeof dbMod.purgeExpiredTrash !== 'function') return;
   try {
-    const purged = await purgeExpiredTrash(TRASH_RETENTION_MS);
+    const purged = await dbMod.purgeExpiredTrash(getTrashRetentionMs());
     if (purged > 0) {
-      recordLog('TRASH_PURGED', `Auto-deleted ${purged} app(s) older than ${TRASH_DAYS} days from trash.`);
+      recordLog('TRASH_PURGED', `Auto-deleted ${purged} app(s) older than ${getTrashDays()} days from trash.`);
       await updateTrashBadge();
       const modal = document.getElementById('trash-modal');
       if (modal && modal.style.display === 'flex') await renderTrash();
@@ -1153,7 +1281,7 @@ async function renderTrash() {
   const emptyEl = document.getElementById('trash-empty');
   const actionsEl = document.getElementById('trash-actions');
   if (!listEl) return;
-  const items = await loadTrashFromDB();
+  const items = typeof dbMod.loadTrashFromDB === 'function' ? await dbMod.loadTrashFromDB() : [];
   listEl.innerHTML = '';
   if (emptyEl) emptyEl.style.display = items.length ? 'none' : 'block';
   if (actionsEl) actionsEl.style.display = items.length ? 'flex' : 'none';
@@ -1172,7 +1300,7 @@ async function renderTrash() {
     restoreBtn.textContent = 'Restore';
     restoreBtn.style.cssText = 'padding:7px 11px; border-radius:10px; background:rgba(10,132,255,0.2); border:1px solid rgba(10,132,255,0.45); color:#0A84FF; font-size:0.7rem; font-weight:700; cursor:pointer;';
     restoreBtn.onclick = async () => {
-      await restoreFromTrash(item.trashId);
+      if (typeof dbMod.restoreFromTrash === 'function') await dbMod.restoreFromTrash(item.trashId);
       await refreshApps();
       await renderTrash();
       await updateTrashBadge();
@@ -1187,7 +1315,7 @@ async function renderTrash() {
     delBtn.style.cssText = 'padding:7px 11px; border-radius:10px; background:rgba(255,69,58,0.15); border:1px solid rgba(255,69,58,0.35); color:#FF453A; font-size:0.7rem; font-weight:700; cursor:pointer;';
     delBtn.onclick = async () => {
       if (!confirm(`Permanently delete "${item.name}"? This cannot be undone.`)) return;
-      await deleteFromTrash(item.trashId);
+      if (typeof dbMod.deleteFromTrash === 'function') await dbMod.deleteFromTrash(item.trashId);
       await renderTrash();
       await updateTrashBadge();
       recordLog('APP_PURGED', `Permanently deleted from trash: "${item.name}" (${item.id})`);
@@ -1207,9 +1335,10 @@ async function openTrash() {
 }
 
 async function restoreAllFromTrash() {
-  const items = await loadTrashFromDB();
+  if (typeof dbMod.loadTrashFromDB !== 'function' || typeof dbMod.restoreFromTrash !== 'function') return;
+  const items = await dbMod.loadTrashFromDB();
   if (!items.length) return;
-  const n = await restoreFromTrash(items.map(i => i.trashId));
+  const n = await dbMod.restoreFromTrash(items.map(i => i.trashId));
   await refreshApps();
   await renderTrash();
   await updateTrashBadge();
@@ -1218,10 +1347,11 @@ async function restoreAllFromTrash() {
 }
 
 async function emptyTrashNow() {
-  const items = await loadTrashFromDB();
+  if (typeof dbMod.loadTrashFromDB !== 'function' || typeof dbMod.emptyTrash !== 'function') return;
+  const items = await dbMod.loadTrashFromDB();
   if (!items.length) return;
   if (!confirm(`Permanently delete all ${items.length} app(s) in the trash? This cannot be undone.`)) return;
-  const n = await emptyTrash();
+  const n = await dbMod.emptyTrash();
   await renderTrash();
   await updateTrashBadge();
   recordLog('TRASH_EMPTIED', `Emptied trash (${n} app(s)).`);
@@ -1253,7 +1383,7 @@ async function saveRename() {
   const targetApp = apps.find(a => String(a.id) === String(appBeingRenamedId));
   if (targetApp) {
     targetApp.name = newName;
-    await saveAppToDB(targetApp);
+    await dbSaveApp(targetApp);
     await refreshApps();
     showToast("App renamed!");
   }
@@ -1265,7 +1395,10 @@ async function exportSingleApp(event, id) {
   const targetApp = apps.find(a => String(a.id) === String(id));
   if (!targetApp) return showToast("Could not find app to export.");
 
-  const codeToExport = getExportableCode(targetApp);
+  const codeToExport = typeof runtimeMod.getExportableCode === 'function'
+    ? runtimeMod.getExportableCode(targetApp)
+    : (targetApp.code || (targetApp.files && targetApp.files[targetApp.entry || 'index.html']?.content) || '');
+
   const safeFilename = `${targetApp.name.toLowerCase().replace(/[^a-z0-9_-]/gi, '_') || 'app'}.html`;
 
   if (navigator.share && navigator.canShare) {
@@ -1324,7 +1457,7 @@ async function exportAllApps() {
 }
 
 function handleBackupSelected(event) {
-  const file = event.target.files[0];
+  const file = event.target.files && event.target.files[0];
   if (!file) return;
 
   const reader = new FileReader();
@@ -1351,7 +1484,7 @@ function handleBackupSelected(event) {
             order: Number.isFinite(item.order) ? item.order : undefined,
             timestamp: item.timestamp || Date.now()
           };
-          await saveAppToDB(appObj);
+          await dbSaveApp(appObj);
           restoredCount++;
         }
       }
@@ -1436,10 +1569,13 @@ function bindUIEvents() {
   const btnWipe = document.getElementById('btn-wipe-all');
   if (btnWipe) {
     btnWipe.onclick = async () => {
-      if (confirm(`Delete ALL apps? They move to Trash and can be restored for ${TRASH_DAYS} days.`)) {
+      if (typeof dbMod.moveAllAppsToTrash !== 'function') {
+        return showToast("Trash module unavailable.");
+      }
+      if (confirm(`Delete ALL apps? They move to Trash and can be restored for ${getTrashDays()} days.`)) {
         let trashIds = [];
         try {
-          trashIds = await moveAllAppsToTrash();
+          trashIds = await dbMod.moveAllAppsToTrash();
         } catch (err) {
           recordLog('TRASH_ERR', `Could not move all apps to trash: ${err}`);
           return showToast("Could not delete apps.");
@@ -1449,10 +1585,12 @@ function bindUIEvents() {
         closeModal('backup-modal');
         recordLog('APP_TRASHED', `Moved ${trashIds.length} app(s) to trash (Delete All).`);
         showUndoToast(`Deleted ${trashIds.length} app${trashIds.length === 1 ? '' : 's'}`, async () => {
-          await restoreFromTrash(trashIds);
-          await refreshApps();
-          await updateTrashBadge();
-          showToast("All apps restored.");
+          if (typeof dbMod.restoreFromTrash === 'function') {
+            await dbMod.restoreFromTrash(trashIds);
+            await refreshApps();
+            await updateTrashBadge();
+            showToast("All apps restored.");
+          }
         });
       }
     };
@@ -1464,7 +1602,14 @@ function bindUIEvents() {
     btnExit.onclick = () => {
       const nativeTTS = getNativeTTS();
       if (nativeTTS) nativeTTS.stop().catch(() => {});
-      exitApp();
+      if (typeof runtimeMod.exitApp === 'function') {
+        runtimeMod.exitApp();
+      } else {
+        const modal = document.getElementById('runtime-modal');
+        const iframe = document.getElementById('runtime-iframe');
+        if (iframe) iframe.src = 'about:blank';
+        if (modal) modal.style.display = 'none';
+      }
     };
   }
 
@@ -1472,13 +1617,21 @@ function bindUIEvents() {
   if (btnLogs) btnLogs.onclick = downloadAppLogs;
 
   const btnReload = document.getElementById('btn-runtime-reload');
-  if (btnReload) btnReload.onclick = () => reloadApp(showToast);
+  if (btnReload) {
+    btnReload.onclick = () => {
+      if (typeof runtimeMod.reloadApp === 'function') runtimeMod.reloadApp(showToast);
+    };
+  }
 
   const btnMode = document.getElementById('btn-runtime-mode');
-  if (btnMode) btnMode.onclick = () => cycleLaunchMode(showToast);
+  if (btnMode) {
+    btnMode.onclick = () => {
+      if (typeof runtimeMod.cycleLaunchMode === 'function') runtimeMod.cycleLaunchMode(showToast);
+    };
+  }
 
   const btnCollapse = document.getElementById('btn-runtime-collapse');
-  if (btnCollapse) btnCollapse.onclick = collapseFloatingMenu;
+  if (btnCollapse) btnCollapse.onclick = safeCollapseFloatingMenu;
 
   // File Inputs
   const iconPicker = document.getElementById('icon-picker');
@@ -1501,7 +1654,7 @@ function bindUIEvents() {
           if (file.name === '.DS_Store' || relPath.includes('__MACOSX/')) continue;
           let rel = relPath || file.name;
           if (rel.startsWith(appName + '/')) rel = rel.substring(appName.length + 1);
-          files[rel] = await readFileContent(file);
+          files[rel] = await readSingleOrMultiFile(file);
         }
         await finalizeMultiFileApp(files, appName);
       } catch (err) {
@@ -1518,13 +1671,16 @@ function bindUIEvents() {
       if (!list.length) return;
       try {
         if (list.length === 1 && (list[0].name.toLowerCase().endsWith('.zip') || (list[0].type || '').includes('zip'))) {
-          const extracted = normalizeFileTree(await parseZipBuffer(await list[0].arrayBuffer()));
+          if (typeof zipMod.parseZipBuffer !== 'function' || typeof zipMod.normalizeFileTree !== 'function') {
+            throw new Error('ZIP module unavailable');
+          }
+          const extracted = zipMod.normalizeFileTree(await zipMod.parseZipBuffer(await list[0].arrayBuffer()));
           return await finalizeMultiFileApp(extracted, list[0].name.replace(/\.[^/.]+$/, ""));
         }
         const files = {};
         for (const f of list) {
           if (f.name === '.DS_Store') continue;
-          files[f.name] = await readFileContent(f);
+          files[f.name] = await readSingleOrMultiFile(f);
         }
         await finalizeMultiFileApp(files, 'Robot App');
       } catch (err) {
@@ -1541,10 +1697,13 @@ function bindUIEvents() {
       if (!file) return;
       showToast("Unpacking ZIP modules...");
       try {
-        const extracted = normalizeFileTree(await parseZipBuffer(await file.arrayBuffer()));
+        if (typeof zipMod.parseZipBuffer !== 'function' || typeof zipMod.normalizeFileTree !== 'function') {
+          throw new Error('ZIP module unavailable');
+        }
+        const extracted = zipMod.normalizeFileTree(await zipMod.parseZipBuffer(await file.arrayBuffer()));
         await finalizeMultiFileApp(extracted, file.name.replace(/\.[^/.]+$/, ""));
       } catch (err) {
-        recordLog('ZIP_ERR', `Extraction failed: ${err.message}`);
+        recordLog('ZIP_ERR', `Extraction failed: ${err?.message || err}`);
         showToast("Error reading ZIP file.");
       }
     };
@@ -1556,7 +1715,7 @@ function bindUIEvents() {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       try {
-        const content = await readFileContent(file);
+        const content = await readSingleOrMultiFile(file);
         let appName = file.name.replace(/\.[^/.]+$/, "");
         if (content && typeof content.content === 'string') {
           const titleMatch = content.content.match(/<title[^>]*>([^<]+)<\/title>/i);
@@ -1576,22 +1735,50 @@ async function boot() {
   if (booted) return;
   booted = true;
 
-  try { initLogger(); } catch (err) { console.warn('Logger init failed:', err); }
-  syncNativePlugins();
-  try { setupFloatingMenu(); } catch (err) { console.warn('FloatingMenu init failed:', err); }
-  try { initSearch(); } catch (err) { console.warn('Search init failed:', err); }
-  try { initStyleModal(); } catch (err) { console.warn('StyleModal init failed:', err); }
-  try { initDragListeners(); } catch (err) { console.warn('DragListeners init failed:', err); }
-
-  // Bind all buttons, modals, and file inputs BEFORE async DB/shortcut work
-  // so adding apps works even if DB migration or a secondary feature errors.
+  // Bind all buttons, modals, and file inputs immediately so the UI is
+  // always responsive even if a module or database step fails.
+  try { initSearch(); } catch (err) { recordLog('SEARCH_INIT_ERR', String(err)); }
+  try { initStyleModal(); } catch (err) { recordLog('STYLE_INIT_ERR', String(err)); }
+  try { initDragListeners(); } catch (err) { recordLog('DRAG_INIT_ERR', String(err)); }
   bindUIEvents();
+  renderLauncher();
 
-  try {
-    await initDatabase();
-  } catch (err) {
-    recordLog('DB_INIT_ERR', `Database initialization failed: ${err}`);
-    showToast('Database error. Check logs.');
+  // Load submodules safely in parallel
+  [
+    loggerMod,
+    dbMod,
+    zipMod,
+    runtimeMod,
+    shortcutsMod,
+    floatingMenuMod
+  ] = await Promise.all([
+    safeImport('./modules/logger.js'),
+    safeImport('./modules/db.js'),
+    safeImport('./modules/zip.js'),
+    safeImport('./modules/runtime.js'),
+    safeImport('./modules/shortcuts.js'),
+    safeImport('./modules/floatingMenu.js')
+  ]);
+
+  if (typeof loggerMod.initLogger === 'function') {
+    try { loggerMod.initLogger(); } catch (err) { recordLog('LOGGER_INIT_ERR', String(err)); }
+  }
+  if (typeof runtimeMod.registerVirtualServer === 'function') {
+    try { runtimeMod.registerVirtualServer(); } catch (err) { recordLog('VSERVER_ERR', String(err)); }
+  }
+  if (typeof floatingMenuMod.setupFloatingMenu === 'function') {
+    try { floatingMenuMod.setupFloatingMenu(); } catch (err) { recordLog('MENU_INIT_ERR', String(err)); }
+  }
+
+  syncNativePlugins();
+
+  if (typeof dbMod.initDatabase === 'function') {
+    try {
+      await dbMod.initDatabase();
+    } catch (err) {
+      recordLog('DB_INIT_ERR', `Database initialization failed: ${err}`);
+      showToast('Database error. Check logs.');
+    }
   }
 
   await runTrashPurge();          // clear anything deleted more than 10 days ago
@@ -1604,14 +1791,16 @@ async function boot() {
     if (document.visibilityState === 'visible') runTrashPurge();
   });
 
-  try {
-    listenForShortcuts((id) => {
-      const a = findApp(id);
-      if (a) launchApp(a, showToast, collapseFloatingMenu);
-      else showToast('Shortcut app not found');
-    });
-  } catch (err) {
-    recordLog('SHORTCUT_ERR', `Shortcut listener failed: ${err}`);
+  if (typeof shortcutsMod.listenForShortcuts === 'function') {
+    try {
+      shortcutsMod.listenForShortcuts((id) => {
+        const a = findApp(id);
+        if (a) safeLaunchApp(a);
+        else showToast('Shortcut app not found');
+      });
+    } catch (err) {
+      recordLog('SHORTCUT_ERR', `Shortcut listener failed: ${err}`);
+    }
   }
 
   recordLog('SMB_STATUS', window.Smb ? 'Native SMB plugin detected and ready.' : 'Native SMB plugin not available (in-browser or not compiled into host).');
