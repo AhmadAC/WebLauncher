@@ -70,7 +70,11 @@ export function syncNativePlugins() {
 }
 
 syncNativePlugins();
-registerVirtualServer();
+try {
+  registerVirtualServer();
+} catch (err) {
+  console.warn('VirtualServer init skipped:', err);
+}
 
 let toastTimer = null;
 
@@ -125,12 +129,12 @@ function escapeHtml(str) {
 }
 
 function triggerPicker(id) {
-  closeModal('import-modal');
   const input = document.getElementById(id);
   if (input) {
     input.value = '';
     input.click();
   }
+  closeModal('import-modal');
 }
 
 function getScrollerEl() {
@@ -297,6 +301,10 @@ function initSearch() {
   const clear = document.getElementById('search-clear');
   if (!input) return;
 
+  input.value = '';
+  searchQuery = '';
+  if (clear) clear.style.display = 'none';
+
   input.addEventListener('input', () => setSearch(input.value));
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
@@ -356,6 +364,7 @@ export function renderLauncher() {
   }
 
   visible.forEach((app) => {
+    if (!app) return;
     const appIdStr = escapeHtml(String(app.id));
     const tile = document.createElement('div');
     tile.className = 'app-tile';
@@ -372,7 +381,7 @@ export function renderLauncher() {
       launchApp(app, showToast, collapseFloatingMenu);
     };
 
-    const fileCount = app.files ? Object.keys(app.files).length : 1;
+    const fileCount = app.files && typeof app.files === 'object' ? Object.keys(app.files).length : 1;
     const isMultiFile = fileCount > 1;
 
     tile.innerHTML = `
@@ -435,7 +444,7 @@ export function renderLauncher() {
     grid.appendChild(tile);
   });
 
-  if (!isEditMode && !query) {
+  if (!isEditMode && !query && apps.length > 0) {
     const addTile = document.createElement('div');
     addTile.style.cssText = "display:flex; flex-direction:column; align-items:center; cursor:pointer;";
     addTile.onclick = () => openModal('import-modal');
@@ -483,8 +492,21 @@ async function normalizeOrder() {
 }
 
 async function refreshApps() {
-  apps = await loadAppsFromDB();
-  await normalizeOrder();
+  try {
+    const loaded = await loadAppsFromDB();
+    apps = Array.isArray(loaded) ? loaded : [];
+  } catch (err) {
+    recordLog('DB_LOAD_ERR', `Could not load apps: ${err}`);
+    showToast('Could not load saved apps.');
+    apps = [];
+  }
+
+  try {
+    await normalizeOrder();
+  } catch (err) {
+    recordLog('ORDER_ERR', `Could not normalize app order: ${err}`);
+  }
+
   renderLauncher();
 }
 
@@ -1013,17 +1035,17 @@ function initDragListeners() {
 // APP MANAGEMENT & IMPORT LOGIC
 // =========================================================================
 async function finalizeMultiFileApp(appFiles, fallbackName) {
-  const fileKeys = Object.keys(appFiles);
+  const fileKeys = appFiles && typeof appFiles === 'object' ? Object.keys(appFiles) : [];
   if (fileKeys.length === 0) {
     showToast("No usable files found.");
     return;
   }
 
   let entryName = fileKeys.find(k => k.toLowerCase() === 'index.html' || k.toLowerCase() === 'index.htm');
-  if (!entryName) entryName = fileKeys.find(k => k.endsWith('.html') || k.endsWith('.htm')) || fileKeys[0];
+  if (!entryName) entryName = fileKeys.find(k => k.toLowerCase().endsWith('.html') || k.toLowerCase().endsWith('.htm')) || fileKeys[0];
 
-  let finalName = fallbackName;
-  if (appFiles[entryName] && !appFiles[entryName].isBinary) {
+  let finalName = fallbackName || 'My App';
+  if (appFiles[entryName] && !appFiles[entryName].isBinary && typeof appFiles[entryName].content === 'string') {
     const titleMatch = appFiles[entryName].content.match(/<title[^>]*>([^<]+)<\/title>/i);
     if (titleMatch && titleMatch[1].trim()) finalName = titleMatch[1].trim();
   }
@@ -1040,7 +1062,14 @@ async function finalizeMultiFileApp(appFiles, fallbackName) {
     timestamp: Date.now()
   };
 
-  await saveAppToDB(newApp);
+  try {
+    await saveAppToDB(newApp);
+  } catch (err) {
+    recordLog('APP_SAVE_ERR', `Could not save "${finalName}": ${err}`);
+    showToast(`Failed to save "${finalName}".`);
+    return;
+  }
+
   await refreshApps();
   recordLog('APP_SAVED', `Installed: "${finalName}" (${fileKeys.length} files)`);
   showToast(`Installed "${finalName}" (${fileKeys.length} files)!`);
@@ -1093,9 +1122,16 @@ function timeAgo(ts) {
 async function updateTrashBadge() {
   const badge = document.getElementById('trash-count');
   if (!badge) return;
-  const list = await loadTrashFromDB();
-  badge.textContent = list.length ? String(list.length) : '';
-  badge.style.display = list.length ? 'inline-block' : 'none';
+  try {
+    const list = await loadTrashFromDB();
+    const count = Array.isArray(list) ? list.length : 0;
+    badge.textContent = count ? String(count) : '';
+    badge.style.display = count ? 'inline-block' : 'none';
+  } catch (err) {
+    recordLog('TRASH_ERR', `Could not update trash badge: ${err}`);
+    badge.textContent = '';
+    badge.style.display = 'none';
+  }
 }
 
 async function runTrashPurge() {
@@ -1330,33 +1366,9 @@ function handleBackupSelected(event) {
 }
 
 // =========================================================================
-// INIT & EVENT LISTENERS
+// UI BINDINGS & BOOTSTRAP
 // =========================================================================
-window.addEventListener('DOMContentLoaded', async () => {
-  initLogger();
-  syncNativePlugins();
-  setupFloatingMenu();
-  initSearch();
-  initStyleModal();
-  initDragListeners();
-
-  await initDatabase();
-  await runTrashPurge();          // clear anything deleted more than 10 days ago
-  await refreshApps();
-  await updateTrashBadge();
-  // Keep purging while the launcher stays open / when it returns to the foreground.
-  setInterval(runTrashPurge, 60 * 60 * 1000);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') runTrashPurge();
-  });
-  listenForShortcuts((id) => {
-    const a = findApp(id);
-    if (a) launchApp(a, showToast, collapseFloatingMenu);
-    else showToast('Shortcut app not found');
-  });
-
-  recordLog('SMB_STATUS', window.Smb ? 'Native SMB plugin detected and ready.' : 'Native SMB plugin not available (in-browser or not compiled into host).');
-
+function bindUIEvents() {
   // Top Nav Buttons
   const btnDownloadLogs = document.getElementById('btn-download-logs');
   if (btnDownloadLogs) btnDownloadLogs.onclick = downloadAppLogs;
@@ -1478,42 +1490,54 @@ window.addEventListener('DOMContentLoaded', async () => {
   const folderPicker = document.getElementById('folder-picker');
   if (folderPicker) {
     folderPicker.onchange = async (e) => {
-      const list = Array.from(e.target.files);
+      const list = Array.from(e.target.files || []);
       if (!list.length) return;
-      const files = {};
-      let appName = (list[0].webkitRelativePath || '').split('/')[0] || 'My App';
-      for (const file of list) {
-        if (file.name === '.DS_Store' || file.webkitRelativePath.includes('__MACOSX/')) continue;
-        let rel = file.webkitRelativePath || file.name;
-        if (rel.startsWith(appName + '/')) rel = rel.substring(appName.length + 1);
-        files[rel] = await readFileContent(file);
+      try {
+        const files = {};
+        const firstRel = list[0].webkitRelativePath || '';
+        const appName = firstRel.split('/')[0] || 'My App';
+        for (const file of list) {
+          const relPath = file.webkitRelativePath || '';
+          if (file.name === '.DS_Store' || relPath.includes('__MACOSX/')) continue;
+          let rel = relPath || file.name;
+          if (rel.startsWith(appName + '/')) rel = rel.substring(appName.length + 1);
+          files[rel] = await readFileContent(file);
+        }
+        await finalizeMultiFileApp(files, appName);
+      } catch (err) {
+        recordLog('FOLDER_ERR', `Folder import failed: ${err}`);
+        showToast("Error importing folder.");
       }
-      await finalizeMultiFileApp(files, appName);
     };
   }
 
   const multifilePicker = document.getElementById('multifile-picker');
   if (multifilePicker) {
     multifilePicker.onchange = async (e) => {
-      const list = Array.from(e.target.files);
+      const list = Array.from(e.target.files || []);
       if (!list.length) return;
-      if (list.length === 1 && (list[0].name.endsWith('.zip') || list[0].type.includes('zip'))) {
-        const extracted = normalizeFileTree(await parseZipBuffer(await list[0].arrayBuffer()));
-        return await finalizeMultiFileApp(extracted, list[0].name.replace(/\.[^/.]+$/, ""));
+      try {
+        if (list.length === 1 && (list[0].name.toLowerCase().endsWith('.zip') || (list[0].type || '').includes('zip'))) {
+          const extracted = normalizeFileTree(await parseZipBuffer(await list[0].arrayBuffer()));
+          return await finalizeMultiFileApp(extracted, list[0].name.replace(/\.[^/.]+$/, ""));
+        }
+        const files = {};
+        for (const f of list) {
+          if (f.name === '.DS_Store') continue;
+          files[f.name] = await readFileContent(f);
+        }
+        await finalizeMultiFileApp(files, 'Robot App');
+      } catch (err) {
+        recordLog('MULTIFILE_ERR', `Multi-file import failed: ${err}`);
+        showToast("Error importing selected files.");
       }
-      const files = {};
-      for (const f of list) {
-        if (f.name === '.DS_Store') continue;
-        files[f.name] = await readFileContent(f);
-      }
-      await finalizeMultiFileApp(files, 'Robot App');
     };
   }
 
   const zipPicker = document.getElementById('zip-picker');
   if (zipPicker) {
     zipPicker.onchange = async (e) => {
-      const file = e.target.files[0];
+      const file = e.target.files && e.target.files[0];
       if (!file) return;
       showToast("Unpacking ZIP modules...");
       try {
@@ -1529,13 +1553,72 @@ window.addEventListener('DOMContentLoaded', async () => {
   const singlePicker = document.getElementById('single-picker');
   if (singlePicker) {
     singlePicker.onchange = async (e) => {
-      const file = e.target.files[0];
+      const file = e.target.files && e.target.files[0];
       if (!file) return;
-      const content = await readFileContent(file);
-      let appName = file.name.replace(/\.[^/.]+$/, "");
-      const titleMatch = content.content.match(/<title[^>]*>([^<]+)<\/title>/i);
-      if (titleMatch && titleMatch[1].trim()) appName = titleMatch[1].trim();
-      await finalizeMultiFileApp({ 'index.html': content }, appName);
+      try {
+        const content = await readFileContent(file);
+        let appName = file.name.replace(/\.[^/.]+$/, "");
+        if (content && typeof content.content === 'string') {
+          const titleMatch = content.content.match(/<title[^>]*>([^<]+)<\/title>/i);
+          if (titleMatch && titleMatch[1].trim()) appName = titleMatch[1].trim();
+        }
+        await finalizeMultiFileApp({ 'index.html': content }, appName);
+      } catch (err) {
+        recordLog('SINGLE_ERR', `File import failed: ${err}`);
+        showToast("Error reading HTML file.");
+      }
     };
   }
-});
+}
+
+let booted = false;
+async function boot() {
+  if (booted) return;
+  booted = true;
+
+  try { initLogger(); } catch (err) { console.warn('Logger init failed:', err); }
+  syncNativePlugins();
+  try { setupFloatingMenu(); } catch (err) { console.warn('FloatingMenu init failed:', err); }
+  try { initSearch(); } catch (err) { console.warn('Search init failed:', err); }
+  try { initStyleModal(); } catch (err) { console.warn('StyleModal init failed:', err); }
+  try { initDragListeners(); } catch (err) { console.warn('DragListeners init failed:', err); }
+
+  // Bind all buttons, modals, and file inputs BEFORE async DB/shortcut work
+  // so adding apps works even if DB migration or a secondary feature errors.
+  bindUIEvents();
+
+  try {
+    await initDatabase();
+  } catch (err) {
+    recordLog('DB_INIT_ERR', `Database initialization failed: ${err}`);
+    showToast('Database error. Check logs.');
+  }
+
+  await runTrashPurge();          // clear anything deleted more than 10 days ago
+  await refreshApps();
+  await updateTrashBadge();
+
+  // Keep purging while the launcher stays open / when it returns to the foreground.
+  setInterval(runTrashPurge, 60 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') runTrashPurge();
+  });
+
+  try {
+    listenForShortcuts((id) => {
+      const a = findApp(id);
+      if (a) launchApp(a, showToast, collapseFloatingMenu);
+      else showToast('Shortcut app not found');
+    });
+  } catch (err) {
+    recordLog('SHORTCUT_ERR', `Shortcut listener failed: ${err}`);
+  }
+
+  recordLog('SMB_STATUS', window.Smb ? 'Native SMB plugin detected and ready.' : 'Native SMB plugin not available (in-browser or not compiled into host).');
+}
+
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
+}
