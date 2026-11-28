@@ -636,56 +636,126 @@ async function applyStyleToAll() {
 
 // ---- Home-screen shortcuts ----
 async function copyText(t) {
-  try { await navigator.clipboard.writeText(t); return true; } catch (e) {}
-  const el = document.getElementById('shortcut-url');
-  try { el.value = t; el.select(); return document.execCommand('copy'); } catch (e) { return false; }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(t);
+      return true;
+    }
+  } catch (e) {}
+  try {
+    const tmp = document.createElement('textarea');
+    tmp.value = t;
+    tmp.setAttribute('readonly', '');
+    tmp.style.cssText = 'position:fixed; opacity:0; left:-9999px;';
+    document.body.appendChild(tmp);
+    tmp.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(tmp);
+    return ok;
+  } catch (e) {
+    return false;
+  }
 }
 
 function openShortcutModal(id) {
   const app = findApp(id);
   if (!app) return;
-  const url = shortcutUrl(app.id);
+
+  const directUrl = shortcutUrl(app.id);
+  const titleEl = document.getElementById('shortcut-title');
   const urlEl = document.getElementById('shortcut-url');
   const lcEl = document.getElementById('shortcut-lc');
-  document.getElementById('shortcut-title').textContent = 'Add ' + app.name + ' to Home Screen';
-  urlEl.value = url;
-  lcEl.value = getLcBundle();
-  document.getElementById('btn-sc-copy').onclick = async () => showToast((await copyText(url)) ? 'Link copied' : 'Copy failed');
-  document.getElementById('btn-sc-lc').onclick = async () => {
-    const b = lcEl.value.trim();
-    if (!b) return showToast('Enter the bundle name first');
-    setLcBundle(b);
-    const lc = liveContainerUrl(app.id, b);
-    urlEl.value = lc;
-    showToast((await copyText(lc)) ? 'LiveContainer link copied' : 'Copy failed');
+  const copyBtn = document.getElementById('btn-sc-copy');
+  const lcBtn = document.getElementById('btn-sc-lc');
+  const testBtn = document.getElementById('btn-sc-test');
+  const profileBtn = document.getElementById('btn-sc-profile');
+
+  if (titleEl) titleEl.textContent = `Add ${app.name} to Home Screen`;
+  if (urlEl) urlEl.value = directUrl;
+  if (lcEl) {
+    lcEl.value = getLcBundle();
+    lcEl.placeholder = 'Paste LiveContainer Launch URL or bundle name';
+    lcEl.onchange = () => setLcBundle(lcEl.value.trim());
+  }
+
+  const getCurrentLaunchUrl = () => {
+    const bundle = lcEl ? lcEl.value.trim() : '';
+    if (bundle) {
+      setLcBundle(bundle);
+      return liveContainerUrl(app.id, bundle);
+    }
+    return directUrl;
   };
-  document.getElementById('btn-sc-test').onclick = () => {
-    const LL = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LaunchLink;
-    if (LL) LL.openExternal({ url }).catch(e => showToast('Open failed'));
-    else { closeModal('shortcut-modal'); launchApp(app, showToast, collapseFloatingMenu); }
-  };
-  document.getElementById('btn-sc-profile').onclick = async () => {
-    try {
-      const png = await renderIconPng(app);
-      const xml = buildWebClip(app, url, png);
-      const LS = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalServer;
-      const LL = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LaunchLink;
-      if (LS && LL) {
-        const { port } = await LS.start();
-        const bytes = new TextEncoder().encode(xml);
-        let bin = ''; for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-        await LS.clearApp({ id: '__shortcuts__' });
-        await LS.writeFile({ id: '__shortcuts__', path: 'shortcut.mobileconfig', data: btoa(bin), append: false });
-        await LS.finish({ id: '__shortcuts__', version: String(Date.now()) });
-        await LL.openExternal({ url: 'http://127.0.0.1:' + port + '/__shortcuts__/shortcut.mobileconfig' });
-        showToast('Install in Settings > Profile Downloaded');
-      } else {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(new Blob([xml], { type: 'application/x-apple-aspen-config' }));
-        a.download = app.name + '.mobileconfig'; a.click();
+
+  if (copyBtn) {
+    copyBtn.onclick = async () => {
+      const ok = await copyText(directUrl);
+      showToast(ok ? 'Direct link copied' : 'Could not copy link');
+    };
+  }
+
+  if (lcBtn) {
+    lcBtn.onclick = async () => {
+      const bundle = lcEl ? lcEl.value.trim() : '';
+      if (!bundle) {
+        showToast('Paste your LiveContainer Launch URL first');
+        if (lcEl) lcEl.focus();
+        return;
       }
-    } catch (e) { recordLog('SHORTCUT_ERR', String(e)); showToast('Could not create profile'); }
-  };
+      setLcBundle(bundle);
+      const lcLink = liveContainerUrl(app.id, bundle);
+      const ok = await copyText(lcLink);
+      showToast(ok ? 'LiveContainer link copied (paste in Shortcuts)' : 'Could not copy LiveContainer link');
+    };
+  }
+
+  if (testBtn) {
+    testBtn.onclick = () => {
+      const targetUrl = getCurrentLaunchUrl();
+      const LL = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LaunchLink;
+      if (LL && typeof LL.openExternal === 'function') {
+        LL.openExternal({ url: targetUrl }).catch(() => showToast('Could not open link'));
+      } else {
+        closeModal('shortcut-modal');
+        launchApp(app, showToast, collapseFloatingMenu);
+      }
+    };
+  }
+
+  if (profileBtn) {
+    profileBtn.onclick = async () => {
+      try {
+        showToast('Building Home Screen icon...');
+        const png = await renderIconPng(app);
+        const xml = buildWebClip(app, directUrl, png);
+        const LS = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalServer;
+        const LL = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LaunchLink;
+        if (LS && LL) {
+          const { port } = await LS.start();
+          const bytes = new TextEncoder().encode(xml);
+          let bin = '';
+          for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+          await LS.clearApp({ id: '__shortcuts__' });
+          await LS.writeFile({ id: '__shortcuts__', path: 'shortcut.mobileconfig', data: btoa(bin), append: false });
+          await LS.finish({ id: '__shortcuts__', version: String(Date.now()) });
+          await LL.openExternal({ url: 'http://127.0.0.1:' + port + '/__shortcuts__/shortcut.mobileconfig' });
+          showToast('Open Settings > Profile Downloaded to finish');
+        } else {
+          const a = document.createElement('a');
+          const blobUrl = URL.createObjectURL(new Blob([xml], { type: 'application/x-apple-aspen-config' }));
+          a.href = blobUrl;
+          a.download = app.name + '.mobileconfig';
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+          showToast('Profile downloaded');
+        }
+      } catch (e) {
+        recordLog('SHORTCUT_ERR', String(e));
+        showToast('Could not create Home Screen icon');
+      }
+    };
+  }
+
   openModal('shortcut-modal');
 }
 
