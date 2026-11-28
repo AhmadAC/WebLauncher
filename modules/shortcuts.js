@@ -1,6 +1,8 @@
 // =========================================================================
 // HOME-SCREEN SHORTCUTS: weblauncher://launch?app=<id> deep links
 // =========================================================================
+import { recordLog } from './logger.js';
+
 const LC_KEY = 'wl_lc_bundle';
 
 export function shortcutUrl(id) {
@@ -82,9 +84,32 @@ export async function renderIconPng(app) {
 }
 
 // Hooks native URL events; onLaunch(id) is called once for every shortcut open.
+//
+// BUG FIX (black screen after shortcut launch): on a cold start iOS delivers the
+// same link TWICE — once through the `urlOpen` event and once through the
+// `getLaunchUrl()` snapshot. Each delivery used to start a second launch, which
+// restarted the loopback server on a new port and wiped the files the first
+// launch was still serving, leaving a blank iframe until a manual reload.
+// Identical links inside a short window are now collapsed into one launch.
 export function listenForShortcuts(onLaunch) {
+  let lastUrl = '';
+  let lastTime = 0;
+  const DEDUPE_MS = 3000;
+
+  const handle = (u) => {
+    const raw = String(u || '');
+    const now = Date.now();
+    if (raw && raw === lastUrl && (now - lastTime) < DEDUPE_MS) {
+      recordLog('SHORTCUT_DEDUPE', `Ignored duplicate delivery of ${raw.slice(0, 120)}`);
+      return;
+    }
+    lastUrl = raw;
+    lastTime = now;
+    const id = parseLaunchUrl(raw);
+    if (id) onLaunch(id);
+  };
+
   const LL = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LaunchLink;
-  const handle = (u) => { const id = parseLaunchUrl(u); if (id) onLaunch(id); };
   if (LL) {
     try { LL.addListener('urlOpen', (e) => handle(e && e.url)); } catch (e) {}
     try { LL.getLaunchUrl().then(r => handle(r && r.url)).catch(() => {}); } catch (e) {}
